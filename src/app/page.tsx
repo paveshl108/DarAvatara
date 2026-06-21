@@ -84,11 +84,8 @@ export default function Home() {
       <main className="flex min-h-screen flex-1 items-center justify-center bg-[#F7F7F7] px-6 text-zinc-950">
         <section className="mx-auto flex max-w-2xl flex-col items-center text-center">
           <h1 className="text-3xl font-semibold tracking-tight sm:text-5xl">
-            Для кого проходит Метаграф?
+            Выберите пол:
           </h1>
-          <p className="mt-6 max-w-xl text-lg leading-8 text-zinc-600 sm:text-xl">
-            Это поможет точнее подобрать образы и формулировки.
-          </p>
           <div className="mt-10 grid w-full max-w-lg gap-4 sm:grid-cols-2">
             <button
               type="button"
@@ -119,7 +116,7 @@ export default function Home() {
               onClick={() => setStep("images")}
               className="mt-10 rounded-full bg-zinc-950 px-8 py-3 text-base font-medium text-white shadow-sm transition-colors hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-950 focus:ring-offset-2 focus:ring-offset-[#F7F7F7]"
             >
-              Дальше
+              Далее
             </button>
           ) : null}
         </section>
