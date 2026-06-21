@@ -102,14 +102,16 @@ type Gender = "male" | "female" | null;
 
 function SmallLogo() {
   return (
-    <Image
-      src="/metagraph-logo.png"
-      alt="Логотип Метаграф"
-      width={2237}
-      height={2358}
-      sizes="56px"
-      className="mb-8 h-auto w-14"
-    />
+    <div className="fixed left-1/2 top-4 z-10 -translate-x-1/2">
+      <Image
+        src="/metagraph-logo.png"
+        alt="Логотип Метаграф"
+        width={2237}
+        height={2358}
+        sizes="72px"
+        className="h-auto w-[72px]"
+      />
+    </div>
   );
 }
 
@@ -246,11 +248,9 @@ export default function Home() {
 
   if (step === "result") {
     return (
-      <main className="flex min-h-screen flex-1 justify-center bg-[#F7F7F7] px-6 py-10 text-zinc-950">
+      <main className="flex min-h-screen flex-1 justify-center bg-[#F7F7F7] px-6 pb-10 pt-28 text-zinc-950">
         <section className="mx-auto flex w-full max-w-3xl flex-col">
-          <div className="flex justify-center">
-            <SmallLogo />
-          </div>
+          <SmallLogo />
           <h1 className="text-center text-3xl font-semibold tracking-tight sm:text-5xl">
             {metagraphResult.title}
           </h1>
@@ -311,7 +311,7 @@ export default function Home() {
 
   if (step === "questions") {
     return (
-      <main className="flex min-h-screen flex-1 items-center justify-center bg-[#F7F7F7] px-6 py-10 text-zinc-950">
+      <main className="flex min-h-screen flex-1 items-center justify-center bg-[#F7F7F7] px-6 pb-10 pt-28 text-zinc-950">
         <section className="mx-auto flex w-full max-w-2xl flex-col items-center text-center">
           <SmallLogo />
           <p className="text-sm font-medium text-zinc-500">
@@ -342,7 +342,7 @@ export default function Home() {
 
   if (step === "images") {
     return (
-      <main className="flex min-h-screen flex-1 items-center justify-center bg-[#F7F7F7] py-10 text-zinc-950">
+      <main className="flex min-h-screen flex-1 items-center justify-center bg-[#F7F7F7] pb-10 pt-28 text-zinc-950">
         <section className="flex w-full flex-col items-center text-center">
           <SmallLogo />
           <h1 className="max-w-sm px-6 text-xl font-medium leading-7 tracking-tight text-zinc-800 sm:max-w-xl sm:text-2xl">
@@ -401,7 +401,7 @@ export default function Home() {
 
   if (step === "name") {
     return (
-      <main className="flex min-h-screen flex-1 items-center justify-center bg-[#F7F7F7] px-6 text-zinc-950">
+      <main className="flex min-h-screen flex-1 items-center justify-center bg-[#F7F7F7] px-6 pb-10 pt-28 text-zinc-950">
         <section className="mx-auto flex w-full max-w-2xl flex-col items-center text-center">
           <SmallLogo />
           <h1 className="text-3xl font-semibold tracking-tight sm:text-5xl">
@@ -429,7 +429,7 @@ export default function Home() {
 
   if (step === "gender") {
     return (
-      <main className="flex min-h-screen flex-1 items-center justify-center bg-[#F7F7F7] px-6 text-zinc-950">
+      <main className="flex min-h-screen flex-1 items-center justify-center bg-[#F7F7F7] px-6 pb-10 pt-28 text-zinc-950">
         <section className="mx-auto flex max-w-2xl flex-col items-center text-center">
           <SmallLogo />
           <h1 className="text-3xl font-semibold tracking-tight sm:text-5xl">
