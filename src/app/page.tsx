@@ -101,6 +101,16 @@ const archetypes = [
 type ChoiceImage = (typeof choiceImages)[number];
 type Gender = "male" | "female" | null;
 
+function formatName(value: string) {
+  const trimmedName = value.trim();
+
+  if (!trimmedName) {
+    return "Метаграф";
+  }
+
+  return trimmedName.charAt(0).toUpperCase() + trimmedName.slice(1);
+}
+
 function SmallLogo() {
   return (
     <div className="pointer-events-none absolute left-1/2 top-4 z-10 -translate-x-1/2">
@@ -174,7 +184,7 @@ function generateMetagraphResult({
         : "Сформулируй один честный шаг, который можно сделать без рывка: не финальное решение, а движение, после которого появится больше ясности.";
 
   return {
-    title: `${name.trim() || "Метаграф"}, ваш Метаграф собран`,
+    title: `${formatName(name)}, ваш Метаграф собран`,
     intro: `Это ${genderText}: не ярлык и не диагноз, а мягкая карта того, что проявилось через выбранные образы и ответы.`,
     imageBlocks: selectedChoices.map((image, index) => ({
       title: imageRoles[index]?.title ?? `Образ ${index + 1}`,
@@ -213,7 +223,7 @@ function generateFallbackResult({
   const allTags = selectedChoices.flatMap((image) => image.tags);
   const uniqueTags = Array.from(new Set(allTags));
   const answerText = answers.filter(Boolean).join(" ").toLowerCase();
-  const userName = name.trim() || "Метаграф";
+  const userName = formatName(name);
   const genderTone =
     gender === "male"
       ? "в вашем мужском способе собирать силу"
@@ -333,7 +343,7 @@ function generateMetagraphImage({
   name: string;
   metagraphResult: ReturnType<typeof generateMetagraphResult>;
 }) {
-  const title = escapeSvgText(name.trim() || "Метаграф");
+  const title = escapeSvgText(formatName(name));
   const archetype = escapeSvgText(metagraphResult.archetype.title);
   const firstImage = metagraphResult.imageBlocks[0]?.image.name ?? "Главный зов";
   const secondImage =
@@ -469,7 +479,7 @@ export default function Home() {
           },
           body: JSON.stringify({
             gender: selectedGender,
-            name: name.trim(),
+            name: formatName(name),
             selectedImages: selectedImageDetails,
             answers: questions.map((question, index) => ({
               question,
