@@ -388,9 +388,6 @@ export default function Home() {
           <h1 className="text-3xl font-semibold tracking-tight sm:text-5xl">
             Ваше имя
           </h1>
-          <p className="mt-6 max-w-xl text-lg leading-8 text-zinc-600">
-            Имя поможет сделать разбор более личным.
-          </p>
           <input
             type="text"
             value={name}
