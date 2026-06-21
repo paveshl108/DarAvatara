@@ -51,7 +51,7 @@ ${JSON.stringify(
           },
         ],
         temperature: 0.8,
-        max_tokens: 2600,
+        max_tokens: 2500,
       }),
     },
   );
