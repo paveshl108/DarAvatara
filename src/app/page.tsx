@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const choiceImages = [
   {
@@ -206,6 +206,9 @@ export default function Home() {
   const [questionIndex, setQuestionIndex] = useState(0);
   const [currentAnswer, setCurrentAnswer] = useState("");
   const [answers, setAnswers] = useState<string[]>([]);
+  const [aiResult, setAiResult] = useState("");
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisFailed, setAnalysisFailed] = useState(false);
   const metagraphResult = useMemo(
     () =>
       generateMetagraphResult({
@@ -216,6 +219,87 @@ export default function Home() {
       }),
     [answers, name, selectedGender, selectedImages],
   );
+  const selectedImageDetails = useMemo(
+    () =>
+      selectedImages
+        .map((imageId, index) => {
+          const image = choiceImages.find((choiceImage) => choiceImage.id === imageId);
+
+          if (!image) {
+            return null;
+          }
+
+          return {
+            order: index + 1,
+            role: imageRoles[index]?.title ?? `Образ ${index + 1}`,
+            id: image.id,
+            name: image.name,
+            tags: image.tags,
+          };
+        })
+        .filter(Boolean),
+    [selectedImages],
+  );
+
+  useEffect(() => {
+    if (step !== "result") {
+      return;
+    }
+
+    let isActive = true;
+
+    async function analyzeMetagraph() {
+      setIsAnalyzing(true);
+      setAnalysisFailed(false);
+      setAiResult("");
+
+      try {
+        const response = await fetch("/api/analyze", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            gender: selectedGender,
+            name: name.trim(),
+            selectedImages: selectedImageDetails,
+            answers: questions.map((question, index) => ({
+              question,
+              answer: answers[index] ?? "",
+            })),
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Analysis request failed.");
+        }
+
+        const data = await response.json();
+
+        if (!data.analysis) {
+          throw new Error("Analysis response is empty.");
+        }
+
+        if (isActive) {
+          setAiResult(data.analysis);
+        }
+      } catch {
+        if (isActive) {
+          setAnalysisFailed(true);
+        }
+      } finally {
+        if (isActive) {
+          setIsAnalyzing(false);
+        }
+      }
+    }
+
+    analyzeMetagraph();
+
+    return () => {
+      isActive = false;
+    };
+  }, [answers, name, selectedGender, selectedImageDetails, step]);
 
   const toggleImage = (image: string) => {
     setSelectedImages((currentImages) => {
@@ -251,53 +335,67 @@ export default function Home() {
       <main className="flex min-h-screen flex-1 justify-center bg-[#F7F7F7] px-6 pb-10 pt-28 text-zinc-950">
         <section className="mx-auto flex w-full max-w-3xl flex-col">
           <SmallLogo />
-          <h1 className="text-center text-3xl font-semibold tracking-tight sm:text-5xl">
-            {metagraphResult.title}
-          </h1>
-          <p className="mx-auto mt-6 max-w-2xl text-center text-lg leading-8 text-zinc-600">
-            {metagraphResult.intro}
-          </p>
-          <div className="mt-10 flex flex-col gap-5">
-            {metagraphResult.imageBlocks.map((block, index) => (
-              <article
-                key={block.title}
-                className="rounded-[28px] border border-zinc-200 bg-white/70 p-6 text-left shadow-sm"
-              >
-                <p className="text-sm font-medium text-zinc-500">
-                  {index + 1}. {block.role}
-                </p>
-                <h2 className="mt-2 text-2xl font-semibold tracking-tight">
-                  {block.title}: {block.image.name}
-                </h2>
-                <p className="mt-4 text-base leading-7 text-zinc-700">
-                  {block.text}
-                </p>
-                <p className="mt-4 text-sm leading-6 text-zinc-500">
-                  Теги: {block.image.tags.join(", ")}
-                </p>
-              </article>
-            ))}
+          {isAnalyzing ? (
+            <p className="mt-16 text-center text-2xl font-medium tracking-tight text-zinc-800">
+              Метаграф собирает ваш образ…
+            </p>
+          ) : aiResult && !analysisFailed ? (
             <article className="rounded-[28px] border border-zinc-200 bg-white/70 p-6 text-left shadow-sm">
-              <h2 className="text-2xl font-semibold tracking-tight">
-                Предварительный образ: {metagraphResult.archetype.title}
-              </h2>
-              <p className="mt-4 text-base leading-7 text-zinc-700">
-                {metagraphResult.archetype.text}
-              </p>
+              <div className="whitespace-pre-wrap text-base leading-8 text-zinc-800">
+                {aiResult}
+              </div>
             </article>
-            <article className="rounded-[28px] border border-zinc-200 bg-white/70 p-6 text-left shadow-sm">
-              <h2 className="text-2xl font-semibold tracking-tight">
-                Ближайший шаг
-              </h2>
-              <p className="mt-4 text-base leading-7 text-zinc-700">
-                {metagraphResult.nearestStep}
+          ) : (
+            <>
+              <h1 className="text-center text-3xl font-semibold tracking-tight sm:text-5xl">
+                {metagraphResult.title}
+              </h1>
+              <p className="mx-auto mt-6 max-w-2xl text-center text-lg leading-8 text-zinc-600">
+                {metagraphResult.intro}
               </p>
-            </article>
-          </div>
-          <p className="mx-auto mt-8 max-w-2xl text-center text-sm leading-6 text-zinc-500">
-            Это предварительная версия разбора. Позже здесь появится полноценный
-            ИИ-анализ по ядру Метаграфа.
-          </p>
+              <div className="mt-10 flex flex-col gap-5">
+                {metagraphResult.imageBlocks.map((block, index) => (
+                  <article
+                    key={block.title}
+                    className="rounded-[28px] border border-zinc-200 bg-white/70 p-6 text-left shadow-sm"
+                  >
+                    <p className="text-sm font-medium text-zinc-500">
+                      {index + 1}. {block.role}
+                    </p>
+                    <h2 className="mt-2 text-2xl font-semibold tracking-tight">
+                      {block.title}: {block.image.name}
+                    </h2>
+                    <p className="mt-4 text-base leading-7 text-zinc-700">
+                      {block.text}
+                    </p>
+                    <p className="mt-4 text-sm leading-6 text-zinc-500">
+                      Теги: {block.image.tags.join(", ")}
+                    </p>
+                  </article>
+                ))}
+                <article className="rounded-[28px] border border-zinc-200 bg-white/70 p-6 text-left shadow-sm">
+                  <h2 className="text-2xl font-semibold tracking-tight">
+                    Предварительный образ: {metagraphResult.archetype.title}
+                  </h2>
+                  <p className="mt-4 text-base leading-7 text-zinc-700">
+                    {metagraphResult.archetype.text}
+                  </p>
+                </article>
+                <article className="rounded-[28px] border border-zinc-200 bg-white/70 p-6 text-left shadow-sm">
+                  <h2 className="text-2xl font-semibold tracking-tight">
+                    Ближайший шаг
+                  </h2>
+                  <p className="mt-4 text-base leading-7 text-zinc-700">
+                    {metagraphResult.nearestStep}
+                  </p>
+                </article>
+              </div>
+              <p className="mx-auto mt-8 max-w-2xl text-center text-sm leading-6 text-zinc-500">
+                Это предварительная версия разбора. Позже здесь появится
+                полноценный ИИ-анализ по ядру Метаграфа.
+              </p>
+            </>
+          )}
           <button
             type="button"
             className="mx-auto mt-8 rounded-full bg-zinc-950 px-8 py-3 text-base font-medium text-white shadow-sm transition-colors hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-950 focus:ring-offset-2 focus:ring-offset-[#F7F7F7]"
