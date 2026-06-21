@@ -35,19 +35,23 @@ export async function POST(request: Request) {
           },
           {
             role: "user",
-            content: JSON.stringify(
-              {
-                gender,
-                name,
-                selectedImages,
-                answers,
-              },
-              null,
-              2,
-            ),
+            content: `Сделай развернутый Метаграф-разбор. Не сокращай блоки до пары фраз. Каждый смысловой блок должен быть содержательным: 2–4 абзаца там, где это уместно. Итоговый текст должен ощущаться как глубокий персональный разбор, а не короткая сводка.
+
+Данные прохождения:
+${JSON.stringify(
+  {
+    gender,
+    name,
+    selectedImages,
+    answers,
+  },
+  null,
+  2,
+)}`,
           },
         ],
         temperature: 0.8,
+        max_tokens: 2600,
       }),
     },
   );

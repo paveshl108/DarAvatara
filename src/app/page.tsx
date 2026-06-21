@@ -102,7 +102,7 @@ type Gender = "male" | "female" | null;
 
 function SmallLogo() {
   return (
-    <div className="fixed left-1/2 top-4 z-10 -translate-x-1/2">
+    <div className="pointer-events-none absolute left-1/2 top-4 z-10 -translate-x-1/2">
       <Image
         src="/metagraph-logo.png"
         alt="Логотип Метаграф"
