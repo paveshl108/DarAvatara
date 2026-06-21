@@ -12,12 +12,27 @@ const choiceImages = Array.from({ length: 8 }, (_, index) => {
   };
 });
 
+const questions = [
+  "Что сейчас в жизни больше всего требует твоего внимания?",
+  "В каком состоянии ты чаще всего находишься в последнее время?",
+  "Что внутри тебя как будто уже готово измениться?",
+  "Что тебе сложнее всего признать самому себе?",
+  "Где ты сейчас больше всего теряешь энергию?",
+  "Куда тебя тянет, даже если пока страшно туда идти?",
+  "Какой шаг ты давно откладываешь, но чувствуешь, что он важен?",
+];
+
 export default function Home() {
-  const [step, setStep] = useState<"start" | "gender" | "images">("start");
+  const [step, setStep] = useState<
+    "start" | "gender" | "images" | "questions" | "result"
+  >("start");
   const [selectedGender, setSelectedGender] = useState<
     "male" | "female" | null
   >(null);
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
+  const [questionIndex, setQuestionIndex] = useState(0);
+  const [currentAnswer, setCurrentAnswer] = useState("");
+  const [answers, setAnswers] = useState<string[]>([]);
 
   const toggleImage = (image: string) => {
     setSelectedImages((currentImages) => {
@@ -32,6 +47,73 @@ export default function Home() {
       return [...currentImages, image];
     });
   };
+
+  const saveAnswerAndContinue = () => {
+    const nextAnswers = [...answers];
+
+    nextAnswers[questionIndex] = currentAnswer.trim();
+    setAnswers(nextAnswers);
+    setCurrentAnswer("");
+
+    if (questionIndex === questions.length - 1) {
+      setStep("result");
+      return;
+    }
+
+    setQuestionIndex((currentIndex) => currentIndex + 1);
+  };
+
+  if (step === "result") {
+    return (
+      <main className="flex min-h-screen flex-1 items-center justify-center bg-[#F7F7F7] px-6 text-zinc-950">
+        <section className="mx-auto flex max-w-2xl flex-col items-center text-center">
+          <h1 className="text-3xl font-semibold tracking-tight sm:text-5xl">
+            Метаграф собран
+          </h1>
+          <p className="mt-6 max-w-xl text-lg leading-8 text-zinc-600">
+            Твои ответы и выбранные образы сохранены внутри прохождения. На
+            следующем этапе здесь появится персональный разбор.
+          </p>
+          <button
+            type="button"
+            className="mt-10 rounded-full bg-zinc-950 px-8 py-3 text-base font-medium text-white shadow-sm transition-colors hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-950 focus:ring-offset-2 focus:ring-offset-[#F7F7F7]"
+          >
+            Завершить
+          </button>
+        </section>
+      </main>
+    );
+  }
+
+  if (step === "questions") {
+    return (
+      <main className="flex min-h-screen flex-1 items-center justify-center bg-[#F7F7F7] px-6 py-10 text-zinc-950">
+        <section className="mx-auto flex w-full max-w-2xl flex-col items-center text-center">
+          <p className="text-sm font-medium text-zinc-500">
+            Вопрос {questionIndex + 1} из {questions.length}
+          </p>
+          <h1 className="mt-5 text-2xl font-medium leading-9 tracking-tight text-zinc-900 sm:text-4xl sm:leading-tight">
+            {questions[questionIndex]}
+          </h1>
+          <textarea
+            value={currentAnswer}
+            onChange={(event) => setCurrentAnswer(event.target.value)}
+            rows={6}
+            placeholder="Напиши свой ответ..."
+            className="mt-8 w-full resize-none rounded-3xl border border-zinc-200 bg-white/80 px-5 py-4 text-left text-base leading-7 text-zinc-950 shadow-sm outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200"
+          />
+          <button
+            type="button"
+            disabled={!currentAnswer.trim()}
+            onClick={saveAnswerAndContinue}
+            className="mt-8 rounded-full bg-zinc-950 px-8 py-3 text-base font-medium text-white shadow-sm transition-colors hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-950 focus:ring-offset-2 focus:ring-offset-[#F7F7F7] disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:text-zinc-500 disabled:shadow-none"
+          >
+            Далее
+          </button>
+        </section>
+      </main>
+    );
+  }
 
   if (step === "images") {
     return (
@@ -79,6 +161,7 @@ export default function Home() {
           {selectedImages.length === 3 ? (
             <button
               type="button"
+              onClick={() => setStep("questions")}
               className="mt-10 rounded-full bg-zinc-950 px-8 py-3 text-base font-medium text-white shadow-sm transition-colors hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-950 focus:ring-offset-2 focus:ring-offset-[#F7F7F7]"
             >
               Далее
