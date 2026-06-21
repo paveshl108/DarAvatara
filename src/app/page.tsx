@@ -24,11 +24,12 @@ const questions = [
 
 export default function Home() {
   const [step, setStep] = useState<
-    "start" | "gender" | "images" | "questions" | "result"
+    "start" | "gender" | "name" | "images" | "questions" | "result"
   >("start");
   const [selectedGender, setSelectedGender] = useState<
     "male" | "female" | null
   >(null);
+  const [name, setName] = useState("");
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [questionIndex, setQuestionIndex] = useState(0);
   const [currentAnswer, setCurrentAnswer] = useState("");
@@ -172,6 +173,36 @@ export default function Home() {
     );
   }
 
+  if (step === "name") {
+    return (
+      <main className="flex min-h-screen flex-1 items-center justify-center bg-[#F7F7F7] px-6 text-zinc-950">
+        <section className="mx-auto flex w-full max-w-2xl flex-col items-center text-center">
+          <h1 className="text-3xl font-semibold tracking-tight sm:text-5xl">
+            Ваше имя
+          </h1>
+          <p className="mt-6 max-w-xl text-lg leading-8 text-zinc-600">
+            Имя поможет сделать разбор более личным.
+          </p>
+          <input
+            type="text"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Введите имя"
+            className="mt-8 w-full rounded-full border border-zinc-200 bg-white/80 px-6 py-4 text-center text-lg text-zinc-950 shadow-sm outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200"
+          />
+          <button
+            type="button"
+            disabled={!name.trim()}
+            onClick={() => setStep("images")}
+            className="mt-8 rounded-full bg-zinc-950 px-8 py-3 text-base font-medium text-white shadow-sm transition-colors hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-950 focus:ring-offset-2 focus:ring-offset-[#F7F7F7] disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:text-zinc-500 disabled:shadow-none"
+          >
+            Далее
+          </button>
+        </section>
+      </main>
+    );
+  }
+
   if (step === "gender") {
     return (
       <main className="flex min-h-screen flex-1 items-center justify-center bg-[#F7F7F7] px-6 text-zinc-950">
@@ -206,7 +237,7 @@ export default function Home() {
           {selectedGender ? (
             <button
               type="button"
-              onClick={() => setStep("images")}
+              onClick={() => setStep("name")}
               className="mt-10 rounded-full bg-zinc-950 px-8 py-3 text-base font-medium text-white shadow-sm transition-colors hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-950 focus:ring-offset-2 focus:ring-offset-[#F7F7F7]"
             >
               Далее
