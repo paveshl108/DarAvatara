@@ -130,9 +130,10 @@ export default function Home() {
         <Image
           src="/metagraph-logo.png"
           alt="Логотип Метаграф"
-          width={120}
-          height={130}
+          width={2237}
+          height={2358}
           priority
+          sizes="43vh"
           className="h-[45vh] w-auto"
         />
         <h1 className="mt-6 text-4xl font-semibold tracking-tight sm:text-6xl">
