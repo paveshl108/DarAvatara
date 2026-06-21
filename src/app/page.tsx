@@ -40,7 +40,7 @@ export default function Home() {
           <h1 className="max-w-sm px-6 text-xl font-medium leading-7 tracking-tight text-zinc-800 sm:max-w-xl sm:text-2xl">
             Выбери 3 образа, которые сейчас откликаются
           </h1>
-          <div className="mt-8 flex w-full snap-x snap-mandatory gap-5 overflow-x-auto px-6 pb-4 sm:gap-6 sm:px-10">
+          <div className="mt-8 flex w-full snap-x snap-mandatory gap-5 overflow-x-auto px-6 pb-4 [scrollbar-width:none] sm:gap-6 sm:px-10 [&::-webkit-scrollbar]:hidden">
             {choiceImages.map((image) => {
               const isSelected = selectedImages.includes(image.id);
               const isLimitReached = selectedImages.length === 3 && !isSelected;
@@ -52,7 +52,7 @@ export default function Home() {
                   aria-pressed={isSelected}
                   aria-disabled={isLimitReached}
                   onClick={() => toggleImage(image.id)}
-                  className={`relative aspect-[3/4] w-[78vw] max-w-[360px] flex-none snap-center overflow-hidden rounded-[28px] bg-white shadow-[0_18px_50px_rgba(24,24,27,0.12)] ring-1 transition sm:w-[320px] ${
+                  className={`relative aspect-[3/4] w-[78vw] max-w-[360px] flex-none snap-center overflow-hidden rounded-[28px] bg-[#F7F7F7] shadow-[0_18px_50px_rgba(24,24,27,0.12)] ring-1 transition sm:w-[320px] ${
                     isSelected
                       ? "ring-2 ring-zinc-950"
                       : "ring-zinc-200 hover:ring-zinc-400"
