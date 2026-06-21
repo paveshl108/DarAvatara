@@ -3,20 +3,14 @@
 import Image from "next/image";
 import { useState } from "react";
 
-const imageCards = [
-  "Лес",
-  "Огонь",
-  "Вода",
-  "Дорога",
-  "Дверь",
-  "Гора",
-  "Зеркало",
-  "Птица",
-  "Дом",
-  "Небо",
-  "Камень",
-  "Свет",
-];
+const choiceImages = Array.from({ length: 8 }, (_, index) => {
+  const imageNumber = index + 1;
+
+  return {
+    id: String(imageNumber),
+    src: `/images/choice/${imageNumber}.png`,
+  };
+});
 
 export default function Home() {
   const [step, setStep] = useState<"start" | "gender" | "images">("start");
@@ -41,27 +35,43 @@ export default function Home() {
 
   if (step === "images") {
     return (
-      <main className="flex min-h-screen flex-1 items-center justify-center bg-[#F7F7F7] px-6 py-12 text-zinc-950">
-        <section className="mx-auto flex w-full max-w-4xl flex-col items-center text-center">
-          <h1 className="max-w-3xl text-3xl font-semibold tracking-tight sm:text-5xl">
+      <main className="flex min-h-screen flex-1 items-center justify-center bg-[#F7F7F7] py-10 text-zinc-950">
+        <section className="flex w-full flex-col items-center text-center">
+          <h1 className="max-w-sm px-6 text-xl font-medium leading-7 tracking-tight text-zinc-800 sm:max-w-xl sm:text-2xl">
             Выбери 3 образа, которые сейчас откликаются
           </h1>
-          <div className="mt-10 grid w-full gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {imageCards.map((image) => {
-              const isSelected = selectedImages.includes(image);
+          <div className="mt-8 flex w-full snap-x snap-mandatory gap-5 overflow-x-auto px-6 pb-4 sm:gap-6 sm:px-10">
+            {choiceImages.map((image) => {
+              const isSelected = selectedImages.includes(image.id);
+              const isLimitReached = selectedImages.length === 3 && !isSelected;
 
               return (
                 <button
-                  key={image}
+                  key={image.id}
                   type="button"
-                  onClick={() => toggleImage(image)}
-                  className={`min-h-32 rounded-2xl border px-6 py-8 text-xl font-medium shadow-sm transition-colors ${
+                  aria-pressed={isSelected}
+                  aria-disabled={isLimitReached}
+                  onClick={() => toggleImage(image.id)}
+                  className={`relative aspect-[3/4] w-[78vw] max-w-[360px] flex-none snap-center overflow-hidden rounded-[28px] bg-white shadow-[0_18px_50px_rgba(24,24,27,0.12)] ring-1 transition sm:w-[320px] ${
                     isSelected
-                      ? "border-zinc-950 bg-zinc-950 text-white"
-                      : "border-zinc-200 bg-white text-zinc-950 hover:border-zinc-400"
+                      ? "ring-2 ring-zinc-950"
+                      : "ring-zinc-200 hover:ring-zinc-400"
                   }`}
                 >
-                  {image}
+                  <Image
+                    src={image.src}
+                    alt={`Образ ${image.id}`}
+                    fill
+                    sizes="(max-width: 640px) 78vw, 320px"
+                    className={`object-cover transition ${
+                      isLimitReached ? "opacity-60" : "opacity-100"
+                    }`}
+                  />
+                  {isSelected ? (
+                    <span className="absolute bottom-4 right-4 flex h-11 w-11 items-center justify-center rounded-full bg-zinc-950 text-xl font-medium text-white shadow-lg">
+                      ✓
+                    </span>
+                  ) : null}
                 </button>
               );
             })}
@@ -71,7 +81,7 @@ export default function Home() {
               type="button"
               className="mt-10 rounded-full bg-zinc-950 px-8 py-3 text-base font-medium text-white shadow-sm transition-colors hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-950 focus:ring-offset-2 focus:ring-offset-[#F7F7F7]"
             >
-              Дальше
+              Далее
             </button>
           ) : null}
         </section>
