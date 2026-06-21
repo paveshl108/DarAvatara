@@ -343,10 +343,10 @@ export default function Home() {
                   aria-pressed={isSelected}
                   aria-disabled={isLimitReached}
                   onClick={() => toggleImage(image.id)}
-                  className={`relative aspect-[3/4] w-[78vw] max-w-[360px] flex-none snap-center overflow-hidden rounded-[28px] bg-[#F7F7F7] shadow-[0_18px_50px_rgba(24,24,27,0.12)] ring-1 transition sm:w-[320px] ${
+                  className={`relative aspect-[3/4] w-[78vw] max-w-[360px] flex-none snap-center overflow-hidden rounded-[28px] bg-[#F7F7F7] transition sm:w-[320px] ${
                     isSelected
                       ? "ring-2 ring-zinc-950"
-                      : "ring-zinc-200 hover:ring-zinc-400"
+                      : ""
                   }`}
                 >
                   <Image
