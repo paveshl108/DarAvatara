@@ -86,6 +86,17 @@ const imageRoles = [
   },
 ];
 
+const metagraphAboutText = [
+  "Метаграф — авторская система Татьяны Шайн для глубокой распаковки человека, его роли, силы и следующего уровня проявления.",
+  "Это не обычный тест, не коучинг и не поверхностная упаковка личного бренда. Метаграф помогает увидеть человека как живую систему: его внутреннее устройство, сильные стороны, скрытые ограничения, природный вектор, аудиторию, образы, смыслы и тот этап, в который он уже готов перейти.",
+  "Сегодня людей всё меньше выбирают только по регалиям. На первый план выходит экономика резонанса: когда человек чувствует — “мне сюда”, “меня здесь понимают”, “этому человеку я доверяю”.",
+  "Метаграф помогает достать настоящую силу человека и перевести её в ясную форму: роль, образ, подачу, продукт, проект, контент, личный бренд или новый жизненный маршрут.",
+  "Мы разбираем не только то, чем человек занимается сейчас, а то, кем он становится. Какая роль в нём считывается. Какая аудитория ему доверяет. Через что он может проявляться естественно. Какие темы, форматы, продукты и действия ведут его на следующий уровень.",
+  "Отдельная часть Метаграфа — работа с образами, символами и артефактами. Потому что человек запоминает не только пользу. Он запоминает ощущение: кто перед ним, в чём его сила и почему к нему хочется вернуться.",
+  "В результате появляется не просто описание личности, а карта перехода: от разрозненности — к ясности, от сомнений — к точности, от старого образа — к новому этапу.",
+  "Метаграф не заставляет становиться кем-то другим. Он помогает увидеть, кем вы уже становитесь — и как этому новому уровню наконец дать форму.",
+];
+
 const archetypes = [
   "Проводник",
   "Наблюдатель",
@@ -531,6 +542,7 @@ export default function Home() {
   const [analysisFailed, setAnalysisFailed] = useState(false);
   const [generatedImageUrl, setGeneratedImageUrl] = useState("");
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+  const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [downloadHint, setDownloadHint] = useState("");
   const metagraphResult = useMemo(
     () =>
@@ -980,28 +992,73 @@ export default function Home() {
   }
 
   return (
-    <main className="flex min-h-screen flex-1 justify-center bg-[#F7F7F7] px-6 text-zinc-950">
-      <section className="mx-auto flex max-w-2xl flex-col items-center pt-6 text-center">
-        <Image
-          src="/metagraph-logo.png"
-          alt="Логотип Метаграф"
-          width={2237}
-          height={2358}
-          priority
-          sizes="43vh"
-          className="h-[45vh] w-auto"
-        />
-        <h1 className="mt-6 text-4xl font-semibold tracking-tight sm:text-6xl">
-          Метаграф
-        </h1>
-        <button
-          type="button"
-          onClick={() => setStep("gender")}
-          className="mt-10 rounded-full bg-zinc-950 px-8 py-3 text-base font-medium text-white shadow-sm transition-colors hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-950 focus:ring-offset-2 focus:ring-offset-[#F7F7F7]"
-        >
-          Начать
-        </button>
-      </section>
-    </main>
+    <>
+      <main className="flex min-h-screen flex-1 justify-center bg-[#F7F7F7] px-6 text-zinc-950">
+        <section className="mx-auto flex w-full max-w-2xl flex-col items-center pt-6 text-center">
+          <Image
+            src="/metagraph-logo.png"
+            alt="Логотип Метаграф"
+            width={2237}
+            height={2358}
+            priority
+            sizes="43vh"
+            className="h-[45vh] w-auto"
+          />
+          <h1 className="mt-6 text-4xl font-semibold tracking-tight sm:text-6xl">
+            Метаграф
+          </h1>
+          <button
+            type="button"
+            onClick={() => setStep("gender")}
+            className="mt-10 w-full max-w-[500px] rounded-full border-2 border-[#85DCF6] bg-white px-10 py-5 text-center text-[21px] font-semibold text-[#111111] shadow-[0_12px_36px_rgba(17,17,17,0.06)] transition duration-200 hover:border-[#6FD1EE] hover:shadow-[0_16px_42px_rgba(17,17,17,0.08)] active:scale-[0.99] sm:py-7 sm:text-[26px]"
+          >
+            Начать
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsAboutOpen(true)}
+            className="mt-5 text-sm font-medium text-[#111111]/80 underline underline-offset-4 transition hover:text-[#111111] sm:text-base"
+          >
+            Что такое Метаграф
+          </button>
+        </section>
+      </main>
+
+      {isAboutOpen ? (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-[#F7F7F7] px-5 py-6 text-[#111111] sm:px-8 sm:py-10">
+          <button
+            type="button"
+            aria-label="Закрыть описание Метаграфа"
+            onClick={() => setIsAboutOpen(false)}
+            className="fixed right-5 top-5 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-white text-3xl font-light leading-none text-[#111111] shadow-[0_10px_30px_rgba(17,17,17,0.08)] transition hover:scale-105 sm:right-8 sm:top-8"
+          >
+            ×
+          </button>
+          <section className="mx-auto flex min-h-full w-full max-w-[720px] flex-col justify-center py-14">
+            <h2
+              className="text-4xl font-semibold tracking-tight sm:text-6xl"
+              style={{ fontFamily: '"Lagonic", "Manrope", sans-serif' }}
+            >
+              Что такое Метаграф
+            </h2>
+            <div className="mt-8 space-y-5 text-[17px] leading-[1.75] text-[#111111]/85 sm:text-[19px]">
+              {metagraphAboutText.map((paragraph) => (
+                <p key={paragraph}>{paragraph}</p>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setIsAboutOpen(false);
+                setStep("gender");
+              }}
+              className="mt-10 w-full max-w-[460px] rounded-full border-2 border-[#85DCF6] bg-white px-9 py-4 text-center text-xl font-semibold text-[#111111] shadow-[0_12px_36px_rgba(17,17,17,0.06)] transition duration-200 hover:border-[#6FD1EE] hover:shadow-[0_16px_42px_rgba(17,17,17,0.08)] active:scale-[0.99] sm:py-5 sm:text-2xl"
+            >
+              Пройти Метаграф
+            </button>
+          </section>
+        </div>
+      ) : null}
+    </>
   );
 }
