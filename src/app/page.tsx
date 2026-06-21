@@ -328,7 +328,7 @@ export default function Home() {
       <main className="flex min-h-screen flex-1 items-center justify-center bg-[#F7F7F7] py-10 text-zinc-950">
         <section className="flex w-full flex-col items-center text-center">
           <h1 className="max-w-sm px-6 text-xl font-medium leading-7 tracking-tight text-zinc-800 sm:max-w-xl sm:text-2xl">
-            Выбери 3 образа, которые сейчас откликаются
+            Выбери 3 образа, которые сейчас откликаются, и нажми на них
           </h1>
           <div className="mt-8 flex w-full snap-x snap-mandatory gap-5 overflow-x-auto px-6 pb-4 [scrollbar-width:none] sm:gap-6 sm:px-10 [&::-webkit-scrollbar]:hidden">
             {choiceImages.map((image) => {
