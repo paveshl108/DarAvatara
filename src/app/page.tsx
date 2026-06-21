@@ -194,6 +194,74 @@ function generateMetagraphResult({
   };
 }
 
+function escapeSvgText(text: string) {
+  return text
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function generateMetagraphImage({
+  name,
+  metagraphResult,
+}: {
+  name: string;
+  metagraphResult: ReturnType<typeof generateMetagraphResult>;
+}) {
+  const title = escapeSvgText(name.trim() || "Метаграф");
+  const archetype = escapeSvgText(metagraphResult.archetype.title);
+  const firstImage = metagraphResult.imageBlocks[0]?.image.name ?? "Главный зов";
+  const secondImage =
+    metagraphResult.imageBlocks[1]?.image.name ?? "Внутренняя потребность";
+  const thirdImage = metagraphResult.imageBlocks[2]?.image.name ?? "Точка перехода";
+  const tags = Array.from(
+    new Set(
+      metagraphResult.imageBlocks.flatMap((block) => block.image.tags).slice(0, 8),
+    ),
+  );
+
+  const svg = `
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1440" viewBox="0 0 1080 1440">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#F7F7F7"/>
+      <stop offset="46%" stop-color="#ECE7DF"/>
+      <stop offset="100%" stop-color="#D8D3C8"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="38%" r="58%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.92"/>
+      <stop offset="58%" stop-color="#F7F7F7" stop-opacity="0.52"/>
+      <stop offset="100%" stop-color="#BEB7AA" stop-opacity="0.12"/>
+    </radialGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="28" stdDeviation="38" flood-color="#18181B" flood-opacity="0.16"/>
+    </filter>
+  </defs>
+  <rect width="1080" height="1440" fill="url(#bg)"/>
+  <circle cx="540" cy="508" r="420" fill="url(#glow)"/>
+  <g filter="url(#softShadow)">
+    <rect x="156" y="142" width="768" height="1156" rx="64" fill="#FDFCF9" opacity="0.82"/>
+  </g>
+  <circle cx="540" cy="486" r="245" fill="none" stroke="#18181B" stroke-width="2" opacity="0.42"/>
+  <circle cx="540" cy="486" r="156" fill="none" stroke="#18181B" stroke-width="1.5" opacity="0.32"/>
+  <path d="M540 246 C626 362 664 432 540 726 C416 432 454 362 540 246Z" fill="#18181B" opacity="0.055"/>
+  <path d="M334 646 C458 578 622 578 746 646" fill="none" stroke="#18181B" stroke-width="3" opacity="0.22"/>
+  <path d="M392 760 C480 716 600 716 688 760" fill="none" stroke="#18181B" stroke-width="2" opacity="0.2"/>
+  <text x="540" y="240" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="34" fill="#52525B" letter-spacing="8">МЕТАГРАФ</text>
+  <text x="540" y="360" text-anchor="middle" font-family="Georgia, serif" font-size="72" fill="#18181B">${title}</text>
+  <text x="540" y="440" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="34" fill="#3F3F46">${archetype}</text>
+  <text x="540" y="886" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="34" fill="#18181B">Главный зов — ${escapeSvgText(firstImage)}</text>
+  <text x="540" y="944" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="34" fill="#18181B">Потребность — ${escapeSvgText(secondImage)}</text>
+  <text x="540" y="1002" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="34" fill="#18181B">Переход — ${escapeSvgText(thirdImage)}</text>
+  <text x="540" y="1120" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="26" fill="#71717A">${escapeSvgText(tags.join(" · "))}</text>
+  <line x1="310" y1="1194" x2="770" y2="1194" stroke="#18181B" stroke-width="1.5" opacity="0.18"/>
+  <text x="540" y="1258" text-anchor="middle" font-family="Georgia, serif" font-size="32" fill="#3F3F46">сейчас в вас проявлено движение к себе</text>
+</svg>`;
+
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
 export default function Home() {
   const [step, setStep] = useState<
     "start" | "gender" | "name" | "images" | "questions" | "result"
@@ -209,6 +277,9 @@ export default function Home() {
   const [aiResult, setAiResult] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisFailed, setAnalysisFailed] = useState(false);
+  const [generatedImageUrl, setGeneratedImageUrl] = useState("");
+  const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+  const [downloadHint, setDownloadHint] = useState("");
   const metagraphResult = useMemo(
     () =>
       generateMetagraphResult({
@@ -252,6 +323,9 @@ export default function Home() {
       setIsAnalyzing(true);
       setAnalysisFailed(false);
       setAiResult("");
+      setGeneratedImageUrl("");
+      setIsImageModalOpen(false);
+      setDownloadHint("");
 
       try {
         const response = await fetch("/api/analyze", {
@@ -301,6 +375,26 @@ export default function Home() {
     };
   }, [answers, name, selectedGender, selectedImageDetails, step]);
 
+  useEffect(() => {
+    if (step !== "result" || isAnalyzing || generatedImageUrl) {
+      return;
+    }
+
+    const hasTextResult = Boolean(aiResult) || analysisFailed;
+
+    if (!hasTextResult) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setGeneratedImageUrl(generateMetagraphImage({ name, metagraphResult }));
+    }, 900);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [aiResult, analysisFailed, generatedImageUrl, isAnalyzing, metagraphResult, name, step]);
+
   const toggleImage = (image: string) => {
     setSelectedImages((currentImages) => {
       if (currentImages.includes(image)) {
@@ -330,7 +424,30 @@ export default function Home() {
     setQuestionIndex((currentIndex) => currentIndex + 1);
   };
 
+  async function downloadImage(imageUrl: string) {
+    setDownloadHint("");
+
+    try {
+      const response = await fetch(imageUrl);
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+
+      link.href = objectUrl;
+      link.download = "metagraph-image.png";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      window.open(imageUrl, "_blank", "noopener,noreferrer");
+      setDownloadHint("Зажмите изображение и выберите ‘Сохранить фото’.");
+    }
+  }
+
   if (step === "result") {
+    const isImagePending = !generatedImageUrl && (Boolean(aiResult) || analysisFailed);
+
     return (
       <main className="flex min-h-screen flex-1 justify-center bg-[#F7F7F7] px-6 pb-10 pt-28 text-zinc-950">
         <section className="mx-auto flex w-full max-w-3xl flex-col">
@@ -339,61 +456,132 @@ export default function Home() {
             <p className="mt-16 text-center text-2xl font-medium tracking-tight text-zinc-800">
               Метаграф собирает ваш образ…
             </p>
-          ) : aiResult && !analysisFailed ? (
-            <article className="rounded-[28px] border border-zinc-200 bg-white/70 p-6 text-left shadow-sm">
-              <div className="whitespace-pre-wrap text-base leading-8 text-zinc-800">
-                {aiResult}
-              </div>
-            </article>
+          ) : isImagePending ? (
+            <p className="mt-16 text-center text-2xl font-medium tracking-tight text-zinc-800">
+              Метаграф проявляет ваш образ…
+            </p>
           ) : (
             <>
-              <h1 className="text-center text-3xl font-semibold tracking-tight sm:text-5xl">
-                {metagraphResult.title}
-              </h1>
-              <p className="mx-auto mt-6 max-w-2xl text-center text-lg leading-8 text-zinc-600">
-                {metagraphResult.intro}
-              </p>
-              <div className="mt-10 flex flex-col gap-5">
-                {metagraphResult.imageBlocks.map((block, index) => (
-                  <article
-                    key={block.title}
-                    className="rounded-[28px] border border-zinc-200 bg-white/70 p-6 text-left shadow-sm"
-                  >
-                    <p className="text-sm font-medium text-zinc-500">
-                      {index + 1}. {block.role}
+              {generatedImageUrl ? (
+                <div className="mx-auto flex w-full max-w-[420px] flex-col items-center">
+                  <div className="relative w-full">
+                    <button
+                      type="button"
+                      onClick={() => setIsImageModalOpen(true)}
+                      className="block w-full overflow-hidden rounded-[28px] shadow-[0_24px_70px_rgba(24,24,27,0.18)]"
+                      aria-label="Открыть образ на весь экран"
+                    >
+                      <img
+                        src={generatedImageUrl}
+                        alt="Сгенерированный образ Метаграфа"
+                        className="aspect-[3/4] w-full rounded-[28px] object-cover"
+                      />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => downloadImage(generatedImageUrl)}
+                      className="absolute bottom-4 right-4 rounded-full bg-zinc-950/90 px-4 py-2 text-sm font-medium text-white shadow-lg backdrop-blur transition-colors hover:bg-zinc-800"
+                    >
+                      Скачать
+                    </button>
+                  </div>
+                  {downloadHint ? (
+                    <p className="mt-3 text-center text-sm leading-6 text-zinc-500">
+                      {downloadHint}
                     </p>
-                    <h2 className="mt-2 text-2xl font-semibold tracking-tight">
-                      {block.title}: {block.image.name}
-                    </h2>
-                    <p className="mt-4 text-base leading-7 text-zinc-700">
-                      {block.text}
-                    </p>
-                    <p className="mt-4 text-sm leading-6 text-zinc-500">
-                      Теги: {block.image.tags.join(", ")}
-                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <div className="mt-10">
+                {aiResult && !analysisFailed ? (
+                  <article className="rounded-[28px] border border-zinc-200 bg-white/70 p-6 text-left shadow-sm">
+                    <div className="whitespace-pre-wrap text-base leading-8 text-zinc-800">
+                      {aiResult}
+                    </div>
                   </article>
-                ))}
-                <article className="rounded-[28px] border border-zinc-200 bg-white/70 p-6 text-left shadow-sm">
-                  <h2 className="text-2xl font-semibold tracking-tight">
-                    Предварительный образ: {metagraphResult.archetype.title}
-                  </h2>
-                  <p className="mt-4 text-base leading-7 text-zinc-700">
-                    {metagraphResult.archetype.text}
-                  </p>
-                </article>
-                <article className="rounded-[28px] border border-zinc-200 bg-white/70 p-6 text-left shadow-sm">
-                  <h2 className="text-2xl font-semibold tracking-tight">
-                    Ближайший шаг
-                  </h2>
-                  <p className="mt-4 text-base leading-7 text-zinc-700">
-                    {metagraphResult.nearestStep}
-                  </p>
-                </article>
+                ) : (
+                  <>
+                    <h1 className="text-center text-3xl font-semibold tracking-tight sm:text-5xl">
+                      {metagraphResult.title}
+                    </h1>
+                    <p className="mx-auto mt-6 max-w-2xl text-center text-lg leading-8 text-zinc-600">
+                      {metagraphResult.intro}
+                    </p>
+                    <div className="mt-10 flex flex-col gap-5">
+                      {metagraphResult.imageBlocks.map((block, index) => (
+                        <article
+                          key={block.title}
+                          className="rounded-[28px] border border-zinc-200 bg-white/70 p-6 text-left shadow-sm"
+                        >
+                          <p className="text-sm font-medium text-zinc-500">
+                            {index + 1}. {block.role}
+                          </p>
+                          <h2 className="mt-2 text-2xl font-semibold tracking-tight">
+                            {block.title}: {block.image.name}
+                          </h2>
+                          <p className="mt-4 text-base leading-7 text-zinc-700">
+                            {block.text}
+                          </p>
+                          <p className="mt-4 text-sm leading-6 text-zinc-500">
+                            Теги: {block.image.tags.join(", ")}
+                          </p>
+                        </article>
+                      ))}
+                      <article className="rounded-[28px] border border-zinc-200 bg-white/70 p-6 text-left shadow-sm">
+                        <h2 className="text-2xl font-semibold tracking-tight">
+                          Предварительный образ: {metagraphResult.archetype.title}
+                        </h2>
+                        <p className="mt-4 text-base leading-7 text-zinc-700">
+                          {metagraphResult.archetype.text}
+                        </p>
+                      </article>
+                      <article className="rounded-[28px] border border-zinc-200 bg-white/70 p-6 text-left shadow-sm">
+                        <h2 className="text-2xl font-semibold tracking-tight">
+                          Ближайший шаг
+                        </h2>
+                        <p className="mt-4 text-base leading-7 text-zinc-700">
+                          {metagraphResult.nearestStep}
+                        </p>
+                      </article>
+                    </div>
+                    <p className="mx-auto mt-8 max-w-2xl text-center text-sm leading-6 text-zinc-500">
+                      Это предварительная версия разбора. Позже здесь появится
+                      полноценный ИИ-анализ по ядру Метаграфа.
+                    </p>
+                  </>
+                )}
               </div>
-              <p className="mx-auto mt-8 max-w-2xl text-center text-sm leading-6 text-zinc-500">
-                Это предварительная версия разбора. Позже здесь появится
-                полноценный ИИ-анализ по ядру Метаграфа.
-              </p>
+
+              {isImageModalOpen && generatedImageUrl ? (
+                <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/80 px-5 py-8">
+                  <button
+                    type="button"
+                    onClick={() => setIsImageModalOpen(false)}
+                    className="absolute right-5 top-5 flex h-11 w-11 items-center justify-center rounded-full bg-white/90 text-3xl leading-none text-zinc-950 shadow-lg"
+                    aria-label="Закрыть"
+                  >
+                    ×
+                  </button>
+                  <img
+                    src={generatedImageUrl}
+                    alt="Сгенерированный образ Метаграфа"
+                    className="max-h-[78vh] w-full max-w-[420px] rounded-[28px] object-contain shadow-2xl"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => downloadImage(generatedImageUrl)}
+                    className="mt-6 rounded-full bg-white px-6 py-3 text-base font-medium text-zinc-950 shadow-lg"
+                  >
+                    Скачать образ
+                  </button>
+                  {downloadHint ? (
+                    <p className="mt-3 max-w-sm text-center text-sm leading-6 text-white/80">
+                      {downloadHint}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
             </>
           )}
           <button
