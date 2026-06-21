@@ -128,22 +128,19 @@ export default function Home() {
   }
 
   return (
-    <main className="flex min-h-screen flex-1 items-center justify-center bg-[#F7F7F7] px-6 text-zinc-950">
-      <section className="mx-auto flex max-w-2xl flex-col items-center text-center">
+    <main className="flex min-h-screen flex-1 justify-center bg-[#F7F7F7] px-6 text-zinc-950">
+      <section className="mx-auto flex max-w-2xl flex-col items-center pt-6 text-center">
         <Image
           src="/metagraph-logo.png"
           alt="Логотип Метаграф"
           width={120}
           height={130}
           priority
-          className="mb-8 h-auto w-36 sm:w-[180px]"
+          className="h-[45vh] w-auto"
         />
-        <h1 className="text-4xl font-semibold tracking-tight sm:text-6xl">
+        <h1 className="mt-6 text-4xl font-semibold tracking-tight sm:text-6xl">
           Метаграф
         </h1>
-        <p className="mt-6 max-w-xl text-lg leading-8 text-zinc-600 sm:text-xl">
-          Выбери образы, которые откликаются, и прояви свой внутренний вектор.
-        </p>
         <button
           type="button"
           onClick={() => setStep("gender")}
