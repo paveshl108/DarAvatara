@@ -106,10 +106,47 @@ type SavedMetagraphResult = {
   id: string;
   created_at?: string;
   name?: string | null;
+  gender?: string | null;
   role?: string | null;
+  daimon?: string | null;
+  artifact?: string | null;
+  key_phrase?: string | null;
   source?: string | null;
   analysis_text?: string | null;
   image_url?: string | null;
+  selected_images?: unknown;
+  answers?: unknown;
+};
+type MovementProgressRecord = {
+  id?: string;
+  current_step?: number;
+  steps?: MovementStep[];
+  completed_steps?: string[];
+  notes?: MovementEntry[];
+  diary?: MovementEntry[];
+};
+type MovementStep = {
+  id: string;
+  title: string;
+  description: string;
+  task: string;
+  status: "locked" | "active" | "completed";
+};
+type MovementEntry = {
+  id: string;
+  type?: string;
+  text?: string;
+  stepId: string;
+  createdAt: string;
+};
+type MovementContext = {
+  resultId: string | null;
+  name: string;
+  analysisText: string;
+  imageUrl: string | null;
+  role: string | null;
+  source: string | null;
+  returnTo: "result" | "saved" | "dashboard";
 };
 
 const genderLabels: Record<Exclude<Gender, null>, string> = {
@@ -622,9 +659,131 @@ function extractResultSection(resultText: string, sectionTitle: string) {
   return sectionText || null;
 }
 
+function getMovementThemes(text: string) {
+  const lowerText = text.toLowerCase();
+
+  return {
+    money: /деньг|финанс|доход|заработ|обмен|ценност/.test(lowerText),
+    tension: /напряж|стресс|зон[аы] утечки|зажат/.test(lowerText),
+    smoking: /кур|сигар|никотин/.test(lowerText),
+    manifestation: /прояв|публич|видим|сторис|публикац/.test(lowerText),
+    movement: /движ|вектор|шаг|идти|переход/.test(lowerText),
+    fear: /страх|страш|бою|защитный контур/.test(lowerText),
+    tiredness: /устал|энерг|сил|пересбор/.test(lowerText),
+    relationships: /отнош|контакт|довер|сообщен|близ/.test(lowerText),
+  };
+}
+
+function inferMovementRole(resultText: string) {
+  const lowerText = resultText.toLowerCase();
+
+  if (/игрок|игра|прояв/.test(lowerText)) {
+    return "Игрок-Проводник";
+  }
+
+  if (/наблюд|тишин|след/.test(lowerText)) {
+    return "Наблюдатель перехода";
+  }
+
+  if (/твор|создан|образ|форма/.test(lowerText)) {
+    return "Творец формы";
+  }
+
+  if (/хранител|тепл|забот|опор/.test(lowerText)) {
+    return "Хранитель опоры";
+  }
+
+  return "Человек перехода";
+}
+
+function generateMovementSteps(resultText: string, answers: string[] = []) {
+  const themes = getMovementThemes(`${resultText} ${answers.join(" ")}`);
+  const smokingTask =
+    "Перед одной привычной сигаретой сделайте паузу 3 минуты и запишите: что я сейчас хочу проявить, но сдерживаю?";
+  const publicTask =
+    "Оставьте маленький видимый след: сторис, сообщение, заметку, короткую мысль или предложение.";
+  const exchangeTask =
+    "Назовите одну ценность, которую вы готовы предложить миру, и один простой формат обмена.";
+
+  const steps: MovementStep[] = [
+    {
+      id: "tension",
+      title: "Увидеть точку напряжения",
+      description: themes.tension
+        ? "Заметить зону утечки энергии: где сила уходит в сомнения, перегруз, привычную разрядку или ожидание идеального момента."
+        : "Заметить, где энергия сейчас утекает: в сомнения, откладывание, перегруз, привычную разрядку или ожидание идеального момента.",
+      task: themes.smoking
+        ? smokingTask
+        : "Запишите одну честную фразу: куда сейчас утекает моя энергия?",
+      status: "active",
+    },
+    {
+      id: "body",
+      title: "Вернуть энергию в тело",
+      description: themes.tiredness
+        ? "Усталость здесь похожа на сигнал тела о необходимости пересборки, а не на отсутствие силы."
+        : "Собрать опору через маленькое действие, паузу, дыхание, дневник или честное признание того, что происходит.",
+      task: "Сделайте паузу на 3 минуты, выдохните и запишите: что телу сейчас нужно вернуть себе?",
+      status: "locked",
+    },
+    {
+      id: "first-trace",
+      title: "Оставить первый след",
+      description: themes.movement
+        ? "Сделать маленький видимый шаг, чтобы внутренний вектор перестал быть мыслью и стал движением."
+        : "Сделать маленький видимый шаг, после которого внутренний вектор перестаёт быть мыслью и становится движением.",
+      task: themes.manifestation ? publicTask : "Сделайте одно действие на 10 минут без требования результата.",
+      status: "locked",
+    },
+    {
+      id: "soft-manifestation",
+      title: "Проявиться без давления",
+      description: themes.fear
+        ? "Показать себя в мягкой форме, не споря с защитным контуром и не требуя от себя идеальности."
+        : "Показать себя, идею, мысль, предложение или действие в мягкой форме, без требования сразу быть идеальным.",
+      task: themes.relationships
+        ? "Отправьте одно честное сообщение человеку, с которым давно хотели связаться."
+        : publicTask,
+      status: "locked",
+    },
+    {
+      id: "role",
+      title: "Собрать роль",
+      description: "Увидеть, какая роль сейчас проявляется: Проводник, Игрок, Творец, Хранитель, Наблюдатель или Человек перехода.",
+      task: "Напишите три слова о роли, в которой вам сейчас легче действовать без маски.",
+      status: "locked",
+    },
+    {
+      id: "exchange",
+      title: "Сделать обмен",
+      description: themes.money
+        ? "Перевести проявленность в обмен, ценность и право выбирать."
+        : "Перевести проявленность в контакт с миром: разговор, предложение, публикацию, продукт, услугу, встречу или первый обмен.",
+      task: themes.money ? exchangeTask : "Сделайте один маленький контакт с миром: разговор, предложение или публикацию.",
+      status: "locked",
+    },
+    {
+      id: "new-contour",
+      title: "Закрепить новый контур",
+      description: "Зафиксировать новый способ действия, чтобы он стал не случайным рывком, а частью новой сборки.",
+      task: "Запишите, какой новый контур действия вы хотите повторить завтра.",
+      status: "locked",
+    },
+  ];
+
+  return steps;
+}
+
 export default function Home() {
   const [step, setStep] = useState<
-    "start" | "gender" | "name" | "images" | "questions" | "result"
+    | "start"
+    | "gender"
+    | "name"
+    | "images"
+    | "questions"
+    | "result"
+    | "returningDashboard"
+    | "transitionMap"
   >("start");
   const [selectedGender, setSelectedGender] = useState<
     "male" | "female" | null
@@ -657,6 +816,20 @@ export default function Home() {
   const [savedResultsLoading, setSavedResultsLoading] = useState(false);
   const [openedSavedResult, setOpenedSavedResult] =
     useState<SavedMetagraphResult | null>(null);
+  const [movementContext, setMovementContext] = useState<MovementContext | null>(null);
+  const [movementProgressId, setMovementProgressId] = useState<string | null>(null);
+  const [movementSteps, setMovementSteps] = useState<MovementStep[]>([]);
+  const [completedMovementSteps, setCompletedMovementSteps] = useState<string[]>([]);
+  const [currentMovementStep, setCurrentMovementStep] = useState(0);
+  const [movementNotes, setMovementNotes] = useState<MovementEntry[]>([]);
+  const [movementDiary, setMovementDiary] = useState<MovementEntry[]>([]);
+  const [movementDiaryText, setMovementDiaryText] = useState("");
+  const [movementMessage, setMovementMessage] = useState("");
+  const [returningResult, setReturningResult] =
+    useState<SavedMetagraphResult | null>(null);
+  const [returningProgress, setReturningProgress] =
+    useState<MovementProgressRecord | null>(null);
+  const [returningChecked, setReturningChecked] = useState(false);
   const metagraphResult = useMemo(
     () =>
       generateMetagraphResult({
@@ -738,6 +911,38 @@ export default function Home() {
       selectedImageDetails,
     ],
   );
+  const buildLocalMetagraphResult = useCallback(
+    (): SavedMetagraphResult => ({
+      id: savedResultId ?? "local-latest",
+      created_at: new Date().toISOString(),
+      name: formatName(name),
+      gender: selectedGender,
+      role: metagraphResult.archetype.title ?? null,
+      daimon: extractResultSection(analysisText, "Даймон"),
+      artifact: extractResultSection(analysisText, "Артефакт перехода"),
+      key_phrase: extractResultSection(analysisText, "Фраза-ключ"),
+      source: analysisSource,
+      analysis_text: analysisText,
+      image_url: generatedImageUrl || null,
+      selected_images: selectedImageDetails,
+      answers: questions.map((question, index) => ({
+        question,
+        answer: answers[index] ?? "",
+        index,
+      })),
+    }),
+    [
+      analysisSource,
+      analysisText,
+      answers,
+      generatedImageUrl,
+      metagraphResult.archetype.title,
+      name,
+      savedResultId,
+      selectedGender,
+      selectedImageDetails,
+    ],
+  );
 
   const insertMetagraphPayload = useCallback(
     async (payload: Record<string, unknown>) => {
@@ -782,6 +987,33 @@ export default function Home() {
         window.localStorage.removeItem("pendingMetagraphResult");
         setSavedResultId(createdId ?? null);
         setSaveMessage("Метаграф сохранён");
+
+        const pendingProgress = window.localStorage.getItem("movementProgressDraft");
+
+        if (createdId && pendingProgress && supabase) {
+          const progressDraft = JSON.parse(pendingProgress) as ReturnType<
+            typeof getMovementDraft
+          >;
+          const { data: existingProgress } = await supabase
+            .from("movement_progress")
+            .select("id")
+            .eq("result_id", createdId)
+            .maybeSingle();
+
+          if (!existingProgress?.id) {
+            await supabase.from("movement_progress").insert({
+              user_id: currentUser.id,
+              result_id: createdId,
+              current_step: progressDraft.current_step ?? 0,
+              steps: progressDraft.steps ?? [],
+              completed_steps: progressDraft.completed_steps ?? [],
+              notes: progressDraft.notes ?? [],
+              diary: progressDraft.diary ?? [],
+            });
+          }
+
+          window.localStorage.removeItem("movementProgressDraft");
+        }
       } catch (error) {
         console.error("Failed to save pending Metagraph result.", error);
         setSaveMessage("Не удалось сохранить. Попробуйте ещё раз.");
@@ -822,8 +1054,78 @@ export default function Home() {
     [user],
   );
 
+  const loadReturningDashboard = useCallback(async (currentUser: User | null) => {
+    if (step !== "start") {
+      setReturningChecked(true);
+      return;
+    }
+
+    if (currentUser && supabase) {
+      try {
+        const { data: latestResult, error: resultError } = await supabase
+          .from("metagraph_results")
+          .select("*")
+          .eq("user_id", currentUser.id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (resultError) {
+          throw resultError;
+        }
+
+        if (latestResult) {
+          const savedResult = latestResult as SavedMetagraphResult;
+          const { data: progressData, error: progressError } = await supabase
+            .from("movement_progress")
+            .select("*")
+            .eq("result_id", savedResult.id)
+            .maybeSingle();
+
+          if (progressError) {
+            throw progressError;
+          }
+
+          setReturningResult(savedResult);
+          setReturningProgress((progressData as MovementProgressRecord | null) ?? null);
+          setStep("returningDashboard");
+          setReturningChecked(true);
+          return;
+        }
+      } catch (error) {
+        console.error("Failed to load returning dashboard.", error);
+      }
+    }
+
+    if (!currentUser) {
+      const localResult = window.localStorage.getItem("lastMetagraphResult");
+
+      if (localResult) {
+        try {
+          const parsedResult = JSON.parse(localResult) as SavedMetagraphResult;
+          const localProgress = window.localStorage.getItem("movementProgressDraft");
+
+          setReturningResult(parsedResult);
+          setReturningProgress(
+            localProgress
+              ? (JSON.parse(localProgress) as MovementProgressRecord)
+              : null,
+          );
+          setStep("returningDashboard");
+          setReturningChecked(true);
+          return;
+        } catch {
+          window.localStorage.removeItem("lastMetagraphResult");
+        }
+      }
+    }
+
+    setReturningChecked(true);
+  }, [step]);
+
   useEffect(() => {
     if (!supabase) {
+      Promise.resolve().then(() => loadReturningDashboard(null));
       return;
     }
 
@@ -842,6 +1144,8 @@ export default function Home() {
       if (currentSession?.user) {
         savePendingMetagraphResult(currentSession.user);
       }
+
+      loadReturningDashboard(currentSession?.user ?? null);
     });
 
     const {
@@ -853,13 +1157,15 @@ export default function Home() {
       if (currentSession?.user) {
         savePendingMetagraphResult(currentSession.user);
       }
+
+      loadReturningDashboard(currentSession?.user ?? null);
     });
 
     return () => {
       isActive = false;
       subscription.unsubscribe();
     };
-  }, [savePendingMetagraphResult]);
+  }, [loadReturningDashboard, savePendingMetagraphResult]);
 
   useEffect(() => {
     if (step !== "result") {
@@ -946,6 +1252,24 @@ export default function Home() {
     };
   }, [aiResult, analysisFailed, generatedImageUrl, isAnalyzing, metagraphResult, name, step]);
 
+  useEffect(() => {
+    if (step !== "result" || isAnalyzing || (!aiResult && !analysisFailed)) {
+      return;
+    }
+
+    window.localStorage.setItem(
+      "lastMetagraphResult",
+      JSON.stringify(buildLocalMetagraphResult()),
+    );
+  }, [
+    aiResult,
+    analysisFailed,
+    buildLocalMetagraphResult,
+    generatedImageUrl,
+    isAnalyzing,
+    step,
+  ]);
+
   const toggleImage = (image: string) => {
     setSelectedImages((currentImages) => {
       if (currentImages.includes(image)) {
@@ -1026,6 +1350,22 @@ export default function Home() {
       setStep("questions");
       setQuestionIndex(questions.length - 1);
       setCurrentAnswer(answers[questions.length - 1] ?? "");
+      return;
+    }
+
+    if (step === "transitionMap") {
+      if (movementContext?.returnTo === "dashboard") {
+        setStep("returningDashboard");
+        return;
+      }
+
+      if (movementContext?.returnTo === "saved") {
+        setStep("start");
+        setIsMyMetagraphOpen(true);
+        return;
+      }
+
+      setStep("result");
     }
   };
 
@@ -1205,7 +1545,7 @@ export default function Home() {
       );
       setAuthMessage("Введите email, чтобы сохранить Метаграф.");
       setIsAuthModalOpen(true);
-      return;
+      return null;
     }
 
     setSaveLoading(true);
@@ -1215,9 +1555,18 @@ export default function Home() {
 
       setSavedResultId(createdId ?? null);
       setSaveMessage("Метаграф сохранён");
+      window.localStorage.setItem(
+        "lastMetagraphResult",
+        JSON.stringify({
+          ...buildLocalMetagraphResult(),
+          id: createdId ?? savedResultId ?? "local-latest",
+        }),
+      );
+      return createdId ?? null;
     } catch (error) {
       console.error("Failed to save Metagraph result.", error);
       setSaveMessage("Не удалось сохранить. Попробуйте ещё раз.");
+      return null;
     } finally {
       setSaveLoading(false);
     }
@@ -1232,6 +1581,447 @@ export default function Home() {
     setOpenedSavedResult(null);
     setIsMyMetagraphOpen(true);
     await loadSavedResults(user);
+  }
+
+  const getDecoratedMovementSteps = (
+    steps: MovementStep[],
+    completedSteps: string[],
+    currentStep: number,
+  ): MovementStep[] =>
+    steps.map((movementStep, index) => ({
+      ...movementStep,
+      status: completedSteps.includes(movementStep.id)
+        ? "completed"
+        : index === currentStep
+          ? "active"
+          : "locked",
+    }));
+
+  const getMovementDraft = (
+    steps = movementSteps,
+    completedSteps = completedMovementSteps,
+    currentStep = currentMovementStep,
+    notes = movementNotes,
+    diary = movementDiary,
+    context = movementContext,
+  ) => ({
+    current_step: currentStep,
+    steps,
+    completed_steps: completedSteps,
+    notes,
+    diary,
+    context,
+  });
+
+  async function persistMovementProgress(
+    draft = getMovementDraft(),
+    context = movementContext,
+  ) {
+    if (!context) {
+      return;
+    }
+
+    if (!user || !context.resultId || !supabase) {
+      window.localStorage.setItem("movementProgressDraft", JSON.stringify(draft));
+      return;
+    }
+
+    try {
+      if (movementProgressId) {
+        const { error } = await supabase
+          .from("movement_progress")
+          .update({
+            current_step: draft.current_step,
+            steps: draft.steps,
+            completed_steps: draft.completed_steps,
+            notes: draft.notes,
+            diary: draft.diary,
+          })
+          .eq("id", movementProgressId);
+
+        if (error) {
+          throw error;
+        }
+
+        return;
+      }
+
+      const { data: existingProgress, error: selectError } = await supabase
+        .from("movement_progress")
+        .select("id")
+        .eq("result_id", context.resultId)
+        .maybeSingle();
+
+      if (selectError) {
+        throw selectError;
+      }
+
+      if (existingProgress?.id) {
+        setMovementProgressId(existingProgress.id as string);
+        await supabase
+          .from("movement_progress")
+          .update({
+            current_step: draft.current_step,
+            steps: draft.steps,
+            completed_steps: draft.completed_steps,
+            notes: draft.notes,
+            diary: draft.diary,
+          })
+          .eq("id", existingProgress.id);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("movement_progress")
+        .insert({
+          user_id: user.id,
+          result_id: context.resultId,
+          current_step: draft.current_step,
+          steps: draft.steps,
+          completed_steps: draft.completed_steps,
+          notes: draft.notes,
+          diary: draft.diary,
+        })
+        .select("id")
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      setMovementProgressId((data?.id as string | undefined) ?? null);
+    } catch (error) {
+      console.error("Failed to persist movement progress.", error);
+      window.localStorage.setItem("movementProgressDraft", JSON.stringify(draft));
+    }
+  }
+
+  async function loadMovementProgress(context: MovementContext, baseSteps: MovementStep[]) {
+    setMovementProgressId(null);
+
+    if (user && context.resultId && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from("movement_progress")
+          .select("id, current_step, steps, completed_steps, notes, diary")
+          .eq("result_id", context.resultId)
+          .maybeSingle();
+
+        if (error) {
+          throw error;
+        }
+
+        if (data) {
+          const loadedSteps = (data.steps as MovementStep[]) ?? baseSteps;
+          const loadedCompleted = (data.completed_steps as string[]) ?? [];
+          const loadedCurrentStep =
+            typeof data.current_step === "number" ? data.current_step : 0;
+
+          setMovementProgressId(data.id as string);
+          setMovementSteps(
+            getDecoratedMovementSteps(loadedSteps, loadedCompleted, loadedCurrentStep),
+          );
+          setCompletedMovementSteps(loadedCompleted);
+          setCurrentMovementStep(loadedCurrentStep);
+          setMovementNotes((data.notes as MovementEntry[]) ?? []);
+          setMovementDiary((data.diary as MovementEntry[]) ?? []);
+          return;
+        }
+      } catch (error) {
+        console.error("Failed to load movement progress.", error);
+      }
+    }
+
+    const localDraft = window.localStorage.getItem("movementProgressDraft");
+
+    if (localDraft && !user) {
+      try {
+        const parsedDraft = JSON.parse(localDraft) as ReturnType<typeof getMovementDraft>;
+
+        if (parsedDraft.context?.analysisText === context.analysisText) {
+          const parsedSteps = parsedDraft.steps?.length ? parsedDraft.steps : baseSteps;
+          const parsedCompleted = parsedDraft.completed_steps ?? [];
+          const parsedCurrentStep = parsedDraft.current_step ?? 0;
+
+          setMovementSteps(
+            getDecoratedMovementSteps(parsedSteps, parsedCompleted, parsedCurrentStep),
+          );
+          setCompletedMovementSteps(parsedCompleted);
+          setCurrentMovementStep(parsedCurrentStep);
+          setMovementNotes(parsedDraft.notes ?? []);
+          setMovementDiary(parsedDraft.diary ?? []);
+          return;
+        }
+      } catch {
+        window.localStorage.removeItem("movementProgressDraft");
+      }
+    }
+
+    setMovementSteps(getDecoratedMovementSteps(baseSteps, [], 0));
+    setCompletedMovementSteps([]);
+    setCurrentMovementStep(0);
+    setMovementNotes([]);
+    setMovementDiary([]);
+
+    const initialDraft = {
+      current_step: 0,
+      steps: getDecoratedMovementSteps(baseSteps, [], 0),
+      completed_steps: [],
+      notes: [],
+      diary: [],
+      context,
+    };
+
+    if (user && context.resultId && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from("movement_progress")
+          .insert({
+            user_id: user.id,
+            result_id: context.resultId,
+            current_step: initialDraft.current_step,
+            steps: initialDraft.steps,
+            completed_steps: initialDraft.completed_steps,
+            notes: initialDraft.notes,
+            diary: initialDraft.diary,
+          })
+          .select("id")
+          .single();
+
+        if (error) {
+          throw error;
+        }
+
+        setMovementProgressId((data?.id as string | undefined) ?? null);
+        return;
+      } catch (error) {
+        console.error("Failed to create movement progress.", error);
+      }
+    }
+
+    window.localStorage.setItem("movementProgressDraft", JSON.stringify(initialDraft));
+  }
+
+  async function openTransitionMapFromCurrentResult() {
+    setMovementMessage("");
+
+    let resultId = savedResultId;
+
+    if (user && !resultId) {
+      resultId = await saveMetagraphResult();
+    }
+
+    const context: MovementContext = {
+      resultId,
+      name: formatName(name),
+      analysisText,
+      imageUrl: generatedImageUrl || null,
+      role: metagraphResult.archetype.title ?? inferMovementRole(analysisText),
+      source: analysisSource,
+      returnTo: "result",
+    };
+    const baseSteps = generateMovementSteps(analysisText, answers);
+
+    setMovementContext(context);
+    await loadMovementProgress(context, baseSteps);
+    setStep("transitionMap");
+  }
+
+  async function openTransitionMapFromSavedResult(result: SavedMetagraphResult) {
+    const resultText = result.analysis_text ?? "";
+    const context: MovementContext = {
+      resultId: result.id,
+      name: result.name ?? "Метаграф",
+      analysisText: resultText,
+      imageUrl: result.image_url ?? null,
+      role: result.role ?? inferMovementRole(resultText),
+      source: result.source ?? null,
+      returnTo: "saved",
+    };
+    const baseSteps = generateMovementSteps(resultText);
+
+    setOpenedSavedResult(result);
+    setMovementContext(context);
+    await loadMovementProgress(context, baseSteps);
+    setIsMyMetagraphOpen(false);
+    setStep("transitionMap");
+  }
+
+  async function openTransitionMapFromDashboard() {
+    if (!returningResult) {
+      return;
+    }
+
+    const resultText = returningResult.analysis_text ?? "";
+    const context: MovementContext = {
+      resultId: returningResult.id,
+      name: returningResult.name ?? "Метаграф",
+      analysisText: resultText,
+      imageUrl: returningResult.image_url ?? null,
+      role: returningResult.role ?? inferMovementRole(resultText),
+      source: returningResult.source ?? null,
+      returnTo: "dashboard",
+    };
+    const baseSteps = generateMovementSteps(resultText);
+
+    setMovementContext(context);
+    await loadMovementProgress(context, baseSteps);
+    setStep("transitionMap");
+  }
+
+  function openReturningAnalysis() {
+    if (!returningResult) {
+      return;
+    }
+
+    setOpenedSavedResult(returningResult);
+    setIsMyMetagraphOpen(true);
+  }
+
+  function startNewSlice() {
+    setSelectedGender(null);
+    setName("");
+    setSelectedImages([]);
+    setQuestionIndex(0);
+    setCurrentAnswer("");
+    setAnswers([]);
+    setAiResult("");
+    setAnalysisFailed(false);
+    setGeneratedImageUrl("");
+    setSavedResultId(null);
+    setSaveMessage("");
+    setStep("gender");
+  }
+
+  function updateMovementProgressState({
+    steps = movementSteps,
+    completedSteps = completedMovementSteps,
+    currentStep = currentMovementStep,
+    notes = movementNotes,
+    diary = movementDiary,
+    message,
+  }: {
+    steps?: MovementStep[];
+    completedSteps?: string[];
+    currentStep?: number;
+    notes?: MovementEntry[];
+    diary?: MovementEntry[];
+    message?: string;
+  }) {
+    const decoratedSteps = getDecoratedMovementSteps(steps, completedSteps, currentStep);
+
+    setMovementSteps(decoratedSteps);
+    setCompletedMovementSteps(completedSteps);
+    setCurrentMovementStep(currentStep);
+    setMovementNotes(notes);
+    setMovementDiary(diary);
+
+    if (message) {
+      setMovementMessage(message);
+    }
+
+    persistMovementProgress({
+      current_step: currentStep,
+      steps: decoratedSteps,
+      completed_steps: completedSteps,
+      notes,
+      diary,
+      context: movementContext,
+    });
+  }
+
+  function completeMovementStep() {
+    const activeStep = movementSteps[currentMovementStep];
+
+    if (!activeStep) {
+      return;
+    }
+
+    const nextCompletedSteps = Array.from(
+      new Set([...completedMovementSteps, activeStep.id]),
+    );
+    const nextCurrentStep = Math.min(currentMovementStep + 1, movementSteps.length - 1);
+
+    updateMovementProgressState({
+      completedSteps: nextCompletedSteps,
+      currentStep: nextCurrentStep,
+      message:
+        nextCompletedSteps.length === movementSteps.length
+          ? "Все 7 шагов собраны."
+          : "Шаг собран. Открыт следующий.",
+    });
+  }
+
+  function postponeMovementStep() {
+    const activeStep = movementSteps[currentMovementStep];
+
+    if (!activeStep) {
+      return;
+    }
+
+    const nextNotes = [
+      {
+        id: crypto.randomUUID(),
+        type: "postponed",
+        stepId: activeStep.id,
+        createdAt: new Date().toISOString(),
+      },
+      ...movementNotes,
+    ];
+
+    updateMovementProgressState({
+      notes: nextNotes,
+      message: "Шаг перенесён. Карта сохранит его как текущий.",
+    });
+  }
+
+  function replaceMovementTask() {
+    const alternativeTasks = [
+      "Запишите одну честную фразу: что я сейчас откладываю и почему?",
+      "Сделайте одно действие на 10 минут без требования результата.",
+      "Отправьте одно сообщение человеку, с которым давно хотели связаться.",
+      "Сделайте одну заметку/сторис/публикацию в черновик.",
+      "Назовите одну зону утечки энергии и один способ вернуть её в действие.",
+      "Выберите один маленький предмет как артефакт перехода и носите его сегодня с собой.",
+      "Закройте один незавершённый микрошаг, который висит в голове.",
+    ];
+    const nextTask =
+      alternativeTasks[
+        (movementNotes.length + movementDiary.length + currentMovementStep) %
+          alternativeTasks.length
+      ];
+    const nextSteps = movementSteps.map((movementStep, index) =>
+      index === currentMovementStep ? { ...movementStep, task: nextTask } : movementStep,
+    );
+
+    updateMovementProgressState({
+      steps: nextSteps,
+      message: "Задание обновлено.",
+    });
+  }
+
+  function saveMovementDiaryNote() {
+    const activeStep = movementSteps[currentMovementStep];
+
+    if (!activeStep || !movementDiaryText.trim()) {
+      return;
+    }
+
+    const nextDiary = [
+      {
+        id: crypto.randomUUID(),
+        text: movementDiaryText.trim(),
+        stepId: activeStep.id,
+        createdAt: new Date().toISOString(),
+      },
+      ...movementDiary,
+    ];
+
+    setMovementDiaryText("");
+    updateMovementProgressState({
+      diary: nextDiary,
+      message: "Заметка сохранена.",
+    });
   }
 
   async function downloadImage(imageUrl: string) {
@@ -1253,6 +2043,247 @@ export default function Home() {
       window.open(imageUrl, "_blank", "noopener,noreferrer");
       setDownloadHint("Зажмите изображение и выберите ‘Сохранить фото’.");
     }
+  }
+
+  if (step === "transitionMap") {
+    const activeStep = movementSteps[currentMovementStep] ?? movementSteps[0];
+    const completedCount = completedMovementSteps.length;
+    const progressPercent = movementSteps.length
+      ? Math.round((completedCount / movementSteps.length) * 100)
+      : 0;
+    const mapText = movementContext?.analysisText ?? analysisText;
+    const assemblyRole =
+      movementContext?.role || extractResultSection(mapText, "Ваш предварительный образ") ||
+      inferMovementRole(mapText);
+    const daimon =
+      extractResultSection(mapText, "Даймон") ??
+      "Сборка новой роли через маленькие действия";
+    const shadow =
+      extractResultSection(mapText, "Что может мешать") ??
+      "Напряжение уходит в разрядку, вместо того чтобы превращаться в действие.";
+    const artifact =
+      extractResultSection(mapText, "Артефакт перехода") ?? "Жетон первого следа";
+    const keyPhrase =
+      extractResultSection(mapText, "Фраза-ключ") ??
+      "Я могу двигаться мягко, но по-настоящему.";
+
+    return (
+      <>
+        <main className="min-h-screen bg-[#F7F7F7] px-5 pb-12 pt-28 text-[#111111] sm:px-8">
+          <BackButton onClick={goBack} />
+          <SmallLogo />
+          <section className="mx-auto w-full max-w-4xl">
+            <p className="text-sm font-medium text-zinc-500">Карта движения</p>
+            <h1 className="mt-2 text-4xl font-semibold tracking-tight sm:text-6xl">
+              Карта перехода
+            </h1>
+            <p className="mt-5 max-w-2xl text-base leading-7 text-zinc-600 sm:text-lg">
+              Ваш Метаграф — это не только разбор, а маршрут движения. Здесь
+              видно, где вы сейчас, какой следующий шаг открыт и что уже собрано.
+            </p>
+
+            {!user ? (
+              <div className="mt-6 rounded-[24px] border border-[#85DCF6]/70 bg-white/70 p-5 text-sm leading-6 text-zinc-700">
+                <p>
+                  Карта пока сохранена только на этом устройстве. Войдите по
+                  email, чтобы не потерять её и вернуться с другого телефона.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    window.localStorage.setItem(
+                      "pendingMetagraphResult",
+                      JSON.stringify(buildMetagraphPayload("pending")),
+                    );
+                    window.localStorage.setItem(
+                      "movementProgressDraft",
+                      JSON.stringify(getMovementDraft()),
+                    );
+                    setStep("start");
+                    setIsAuthModalOpen(true);
+                  }}
+                  className="mt-4 rounded-full border-2 border-[#85DCF6] bg-white px-5 py-2.5 font-medium text-[#111111]"
+                >
+                  Сохранить и войти
+                </button>
+              </div>
+            ) : null}
+
+            <div className="mt-8 rounded-[28px] border border-black/5 bg-white/70 p-6 shadow-sm">
+              <h2 className="text-xl font-semibold">Точка сборки</h2>
+              <div className="mt-4 grid gap-3 text-sm leading-6 text-zinc-700 sm:grid-cols-2">
+                <p>
+                  <strong className="text-[#111111]">Образ силы:</strong>{" "}
+                  {assemblyRole.split("\n")[0]}
+                </p>
+                <p>
+                  <strong className="text-[#111111]">Даймон:</strong>{" "}
+                  {daimon.split("\n")[0]}
+                </p>
+                <p>
+                  <strong className="text-[#111111]">Тень силы:</strong>{" "}
+                  {shadow.split("\n")[0]}
+                </p>
+                <p>
+                  <strong className="text-[#111111]">Артефакт:</strong>{" "}
+                  {artifact.split("\n")[0]}
+                </p>
+                <p className="sm:col-span-2">
+                  <strong className="text-[#111111]">Фраза-ключ:</strong>{" "}
+                  {keyPhrase.split("\n")[0]}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 rounded-[28px] border border-black/5 bg-white/70 p-6 shadow-sm">
+              <div className="flex items-center justify-between gap-4 text-sm text-zinc-500">
+                <span>
+                  {completedCount} из {movementSteps.length || 7} шагов пройдено
+                </span>
+                <span>{progressPercent}% пути собрано</span>
+              </div>
+              <div className="mt-4 h-3 overflow-hidden rounded-full bg-zinc-200">
+                <div
+                  className="h-full rounded-full bg-[#85DCF6] transition-all duration-500"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+            </div>
+
+            {activeStep ? (
+              <div className="mt-6 rounded-[28px] border-2 border-[#85DCF6] bg-white p-6 shadow-sm">
+                <p className="text-sm font-medium text-zinc-500">
+                  Текущий шаг {currentMovementStep + 1}
+                </p>
+                <h2 className="mt-2 text-2xl font-semibold">{activeStep.title}</h2>
+                <p className="mt-4 text-base leading-7 text-zinc-700">
+                  {activeStep.description}
+                </p>
+                <div className="mt-5 rounded-3xl bg-[#F7F7F7] p-5">
+                  <p className="text-sm font-semibold">Задание текущего шага</p>
+                  <p className="mt-2 text-base leading-7 text-zinc-700">
+                    {activeStep.task}
+                  </p>
+                </div>
+                <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={completeMovementStep}
+                    className="rounded-full border-2 border-[#85DCF6] bg-white px-6 py-3 font-semibold"
+                  >
+                    Выполнил
+                  </button>
+                  <button
+                    type="button"
+                    onClick={postponeMovementStep}
+                    className="rounded-full border border-zinc-200 bg-white px-6 py-3 font-medium"
+                  >
+                    Перенести
+                  </button>
+                  <button
+                    type="button"
+                    onClick={replaceMovementTask}
+                    className="rounded-full px-6 py-3 font-medium underline underline-offset-4"
+                  >
+                    Хочу другое задание
+                  </button>
+                </div>
+                {movementMessage ? (
+                  <p className="mt-4 text-sm text-zinc-500">{movementMessage}</p>
+                ) : null}
+              </div>
+            ) : null}
+
+            <div className="mt-8 space-y-3">
+              <h2 className="text-2xl font-semibold">7 шагов перехода</h2>
+              {movementSteps.map((movementStep, index) => (
+                <div
+                  key={movementStep.id}
+                  className={`rounded-[24px] border bg-white/70 p-5 transition ${
+                    movementStep.status === "active"
+                      ? "border-[#85DCF6]"
+                      : "border-black/5"
+                  } ${movementStep.status === "locked" ? "opacity-55" : ""}`}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-sm text-zinc-500">Шаг {index + 1}</p>
+                      <h3 className="mt-1 text-lg font-semibold">
+                        {movementStep.title}
+                      </h3>
+                    </div>
+                    <span className="rounded-full bg-[#F7F7F7] px-3 py-1 text-xs font-medium">
+                      {movementStep.status === "completed"
+                        ? "✓ Собрано"
+                        : movementStep.status === "active"
+                          ? "Открыто"
+                          : "Закрыто"}
+                    </span>
+                  </div>
+                  <p className="mt-3 text-sm leading-6 text-zinc-600">
+                    {movementStep.description}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-8 rounded-[28px] border border-black/5 bg-white/70 p-6 shadow-sm">
+              <h2 className="text-2xl font-semibold">Дневник перехода</h2>
+              <p className="mt-3 text-base leading-7 text-zinc-600">
+                Запишите, что изменилось после шага. Не нужно писать красиво —
+                важно заметить движение.
+              </p>
+              <textarea
+                value={movementDiaryText}
+                onChange={(event) => setMovementDiaryText(event.target.value)}
+                rows={5}
+                placeholder="Что я заметил? Где стало легче? Где появилось сопротивление?"
+                className="mt-5 w-full resize-none rounded-3xl border border-zinc-200 bg-white px-5 py-4 text-base leading-7 outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200"
+              />
+              <button
+                type="button"
+                onClick={saveMovementDiaryNote}
+                disabled={!movementDiaryText.trim()}
+                className="mt-4 rounded-full border-2 border-[#85DCF6] bg-white px-6 py-3 font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Сохранить заметку
+              </button>
+              {movementDiary.length > 0 ? (
+                <div className="mt-6 space-y-3">
+                  {movementDiary.slice(0, 3).map((entry) => (
+                    <div
+                      key={entry.id}
+                      className="rounded-3xl bg-[#F7F7F7] p-4 text-sm leading-6 text-zinc-700"
+                    >
+                      <p>{entry.text}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={goBack}
+                className="rounded-full border-2 border-[#85DCF6] bg-white px-6 py-3 font-semibold"
+              >
+                Вернуться к разбору
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setStep("gender");
+                }}
+                className="rounded-full border border-zinc-200 bg-white px-6 py-3 font-medium"
+              >
+                Пройти Метаграф заново
+              </button>
+            </div>
+          </section>
+        </main>
+      </>
+    );
   }
 
   const authModal = isAuthModalOpen ? (
@@ -1393,7 +2424,14 @@ export default function Home() {
                       onClick={() => setOpenedSavedResult(result)}
                       className="mt-4 rounded-full border-2 border-[#85DCF6] bg-white px-5 py-2.5 text-sm font-medium"
                     >
-                      Открыть
+                      Открыть разбор
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openTransitionMapFromSavedResult(result)}
+                      className="ml-2 mt-4 rounded-full border border-[#85DCF6] bg-white px-5 py-2.5 text-sm font-medium"
+                    >
+                      Открыть карту
                     </button>
                   </div>
                 ))}
@@ -1418,6 +2456,166 @@ export default function Home() {
       </section>
     </div>
   ) : null;
+
+  if (step === "returningDashboard") {
+    const dashboardText = returningResult?.analysis_text ?? "";
+    const dashboardSteps =
+      returningProgress?.steps?.length
+        ? returningProgress.steps
+        : generateMovementSteps(dashboardText);
+    const dashboardCompleted = returningProgress?.completed_steps ?? [];
+    const dashboardCurrentStep =
+      typeof returningProgress?.current_step === "number"
+        ? returningProgress.current_step
+        : Math.min(dashboardCompleted.length, dashboardSteps.length - 1);
+    const dashboardActiveStep =
+      dashboardSteps[dashboardCurrentStep] ?? dashboardSteps[0];
+    const dashboardPercent = dashboardSteps.length
+      ? Math.round((dashboardCompleted.length / dashboardSteps.length) * 100)
+      : 0;
+    const dashboardRole =
+      returningResult?.role ?? inferMovementRole(dashboardText);
+    const dashboardDaimon =
+      returningResult?.daimon ??
+      extractResultSection(dashboardText, "Даймон") ??
+      "Сборка новой роли через маленькие действия";
+    const dashboardKeyPhrase =
+      returningResult?.key_phrase ??
+      extractResultSection(dashboardText, "Фраза-ключ") ??
+      "Я могу двигаться мягко, но по-настоящему.";
+
+    return (
+      <>
+        <main className="min-h-screen bg-[#F7F7F7] px-5 pb-12 pt-10 text-[#111111] sm:px-8">
+          <section className="mx-auto w-full max-w-4xl">
+            <p className="text-sm font-medium text-zinc-500">Возвращение</p>
+            <h1 className="mt-2 text-4xl font-semibold tracking-tight sm:text-6xl">
+              Мой Метаграф
+            </h1>
+            <p className="mt-5 max-w-2xl text-base leading-7 text-zinc-600 sm:text-lg">
+              Вы уже начали свой переход. Здесь можно вернуться к разбору,
+              открыть карту и продолжить движение.
+            </p>
+
+            {!user ? (
+              <div className="mt-6 rounded-[24px] border border-[#85DCF6]/70 bg-white/70 p-5 text-sm leading-6 text-zinc-700">
+                <p>
+                  Сейчас Метаграф сохранён только на этом устройстве. Войдите по
+                  email, чтобы не потерять его и открыть с другого телефона.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStep("start");
+                    setIsAuthModalOpen(true);
+                  }}
+                  className="mt-4 rounded-full border-2 border-[#85DCF6] bg-white px-5 py-2.5 font-medium text-[#111111]"
+                >
+                  Сохранить через email
+                </button>
+              </div>
+            ) : null}
+
+            <div className="mt-8 grid gap-5 lg:grid-cols-3">
+              <div className="rounded-[28px] border border-black/5 bg-white/70 p-6 shadow-sm lg:col-span-2">
+                <h2 className="text-xl font-semibold">Точка сборки</h2>
+                <div className="mt-4 space-y-3 text-sm leading-6 text-zinc-700">
+                  <p>
+                    <strong className="text-[#111111]">Образ силы:</strong>{" "}
+                    {dashboardRole}
+                  </p>
+                  <p>
+                    <strong className="text-[#111111]">Даймон:</strong>{" "}
+                    {dashboardDaimon.split("\n")[0]}
+                  </p>
+                  <p>
+                    <strong className="text-[#111111]">Фраза-ключ:</strong>{" "}
+                    {dashboardKeyPhrase.split("\n")[0]}
+                  </p>
+                  <p className="text-zinc-500">
+                    {returningResult?.created_at
+                      ? `Дата последнего Метаграфа: ${new Date(
+                          returningResult.created_at,
+                        ).toLocaleDateString("ru-RU")}`
+                      : "Дата последнего Метаграфа: на этом устройстве"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-[28px] border border-black/5 bg-white/70 p-6 shadow-sm">
+                <h2 className="text-xl font-semibold">Прогресс</h2>
+                <p className="mt-4 text-sm text-zinc-500">
+                  {dashboardCompleted.length} из {dashboardSteps.length || 7} шагов собрано
+                </p>
+                <div className="mt-4 h-3 overflow-hidden rounded-full bg-zinc-200">
+                  <div
+                    className="h-full rounded-full bg-[#85DCF6] transition-all duration-500"
+                    style={{ width: `${dashboardPercent}%` }}
+                  />
+                </div>
+                <p className="mt-3 text-sm font-medium text-zinc-600">
+                  {dashboardPercent}% пути собрано
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 rounded-[28px] border border-black/5 bg-white/70 p-6 shadow-sm">
+              <p className="text-sm font-medium text-zinc-500">Текущий шаг</p>
+              <h2 className="mt-2 text-2xl font-semibold">
+                {dashboardActiveStep?.title ?? "Оставить первый след"}
+              </h2>
+              <p className="mt-3 text-base leading-7 text-zinc-700">
+                {dashboardActiveStep?.task ??
+                  "Сделайте одно маленькое действие, чтобы внутренний вектор стал движением."}
+              </p>
+              <button
+                type="button"
+                onClick={openTransitionMapFromDashboard}
+                className="mt-5 rounded-full border-2 border-[#85DCF6] bg-white px-6 py-3 font-semibold"
+              >
+                Открыть карту перехода
+              </button>
+            </div>
+
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+              <button
+                type="button"
+                onClick={openTransitionMapFromDashboard}
+                className="rounded-full border-2 border-[#85DCF6] bg-white px-6 py-3 font-semibold"
+              >
+                Открыть карту перехода
+              </button>
+              <button
+                type="button"
+                onClick={openReturningAnalysis}
+                className="rounded-full border border-[#85DCF6] bg-white px-6 py-3 font-medium"
+              >
+                Открыть мой разбор
+              </button>
+              <button
+                type="button"
+                onClick={startNewSlice}
+                className="rounded-full border border-zinc-200 bg-white px-6 py-3 font-medium"
+              >
+                Пройти новый срез
+              </button>
+              {user ? (
+                <button
+                  type="button"
+                  onClick={signOut}
+                  className="rounded-full px-6 py-3 font-medium underline underline-offset-4"
+                >
+                  Выйти
+                </button>
+              ) : null}
+            </div>
+          </section>
+        </main>
+        {authModal}
+        {myMetagraphModal}
+      </>
+    );
+  }
 
   if (step === "result") {
     const isImagePending = !generatedImageUrl && (Boolean(aiResult) || analysisFailed);
@@ -1485,19 +2683,11 @@ export default function Home() {
                 )}
               </div>
 
-              <div className="mx-auto mt-8 flex w-full max-w-lg flex-col gap-3 sm:flex-row sm:justify-center">
-                <button
-                  type="button"
-                  onClick={saveMetagraphResult}
-                  disabled={saveLoading}
-                  className="rounded-full border-2 border-[#85DCF6] bg-white px-6 py-3 text-base font-medium text-[#111111] shadow-sm transition hover:border-[#6FD1EE] disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {saveLoading ? "Сохраняем..." : "Сохранить мой Метаграф"}
-                </button>
+              <div className="mx-auto mt-8 flex w-full max-w-3xl flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-center">
                 <button
                   type="button"
                   onClick={downloadResultText}
-                  className="rounded-full border border-[#85DCF6] bg-white px-6 py-3 text-base font-medium text-[#111111] shadow-sm transition hover:border-[#6FD1EE]"
+                  className="rounded-full border-2 border-[#85DCF6] bg-white px-6 py-3 text-base font-medium text-[#111111] shadow-sm transition hover:border-[#6FD1EE]"
                 >
                   Скачать разбор
                 </button>
@@ -1508,6 +2698,14 @@ export default function Home() {
                 >
                   Скопировать
                 </button>
+                <button
+                  type="button"
+                  onClick={saveMetagraphResult}
+                  disabled={saveLoading}
+                  className="rounded-full border border-[#85DCF6] bg-white px-6 py-3 text-base font-medium text-[#111111] shadow-sm transition hover:border-[#6FD1EE] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {saveLoading ? "Сохраняем..." : "Сохранить мой Метаграф"}
+                </button>
               </div>
               {saveMessage || resultDownloadHint || copyMessage ? (
                 <p className="mt-3 text-center text-sm leading-6 text-zinc-500">
@@ -1517,6 +2715,15 @@ export default function Home() {
               {savedResultId ? (
                 <p className="sr-only">Сохранённый Метаграф: {savedResultId}</p>
               ) : null}
+              <div className="mt-5 flex justify-center">
+                <button
+                  type="button"
+                  onClick={openTransitionMapFromCurrentResult}
+                  className="rounded-full border-2 border-[#85DCF6] bg-white px-7 py-3 text-base font-semibold text-[#111111] shadow-sm transition hover:border-[#6FD1EE]"
+                >
+                  Открыть карту перехода
+                </button>
+              </div>
 
               {isImageModalOpen && generatedImageUrl ? (
                 <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/80 px-5 py-8">
@@ -1731,6 +2938,16 @@ export default function Home() {
             </button>
           ) : null}
         </section>
+      </main>
+    );
+  }
+
+  if (step === "start" && !returningChecked) {
+    return (
+      <main className="flex min-h-screen flex-1 items-center justify-center bg-[#F7F7F7] px-6 text-center text-zinc-950">
+        <p className="text-base font-medium text-zinc-500">
+          Метаграф проверяет ваш путь…
+        </p>
       </main>
     );
   }
