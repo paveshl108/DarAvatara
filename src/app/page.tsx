@@ -193,7 +193,7 @@ function BackButton({ onClick }: { onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="fixed left-4 top-4 z-20 rounded-full px-4 py-3 text-sm font-medium text-[#111111] transition hover:bg-white/70 sm:left-6 sm:top-6"
+      className="fixed left-4 top-4 z-40 rounded-full border border-black/10 bg-[#F7F7F7]/90 px-4 py-3 text-sm font-medium text-[#111111] shadow-[0_10px_30px_rgba(17,17,17,0.08)] backdrop-blur transition hover:bg-white sm:left-6 sm:top-6"
     >
       ← Назад
     </button>
