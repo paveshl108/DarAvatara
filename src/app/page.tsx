@@ -191,6 +191,45 @@ function BackButton({ onClick }: { onClick: () => void }) {
   );
 }
 
+function ProfileButton({
+  email,
+  onClick,
+}: {
+  email?: string | null;
+  onClick: () => void;
+}) {
+  const profileLetter = email?.trim().charAt(0).toUpperCase();
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="Профиль"
+      className="fixed right-4 top-4 z-20 flex h-11 w-11 items-center justify-center rounded-full border border-black/10 bg-white/80 text-sm font-semibold text-[#111111] shadow-sm backdrop-blur transition hover:bg-white sm:right-6 sm:top-6"
+    >
+      {profileLetter ? (
+        <span>{profileLetter}</span>
+      ) : (
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          aria-hidden="true"
+        >
+          <circle cx="12" cy="8" r="4" stroke="currentColor" strokeWidth="1.8" />
+          <path
+            d="M5 20c1.4-3.2 4-5 7-5s5.6 1.8 7 5"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeWidth="1.8"
+          />
+        </svg>
+      )}
+    </button>
+  );
+}
+
 function MetagraphAboutContent() {
   return (
     <div className="mt-8 space-y-4 text-[16px] leading-[1.72] text-[#111111]/82 sm:mt-10 sm:space-y-5 sm:text-[18px] sm:leading-[1.75] [&_strong]:font-bold [&_strong]:text-[#111111]">
@@ -805,6 +844,8 @@ export default function Home() {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [authEmail, setAuthEmail] = useState("");
+  const [authCode, setAuthCode] = useState("");
+  const [authStep, setAuthStep] = useState<"email" | "code">("email");
   const [authMessage, setAuthMessage] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
   const [saveLoading, setSaveLoading] = useState(false);
@@ -852,6 +893,7 @@ export default function Home() {
   );
   const analysisText = aiResult && !analysisFailed ? aiResult : fallbackResult;
   const analysisSource = aiResult && !analysisFailed ? "ai" : "fallback";
+  const profileEmail = user?.email ?? session?.user.email ?? null;
   const selectedImageDetails = useMemo(
     () =>
       selectedImages
@@ -1261,13 +1303,22 @@ export default function Home() {
       "lastMetagraphResult",
       JSON.stringify(buildLocalMetagraphResult()),
     );
+
+    if (!user) {
+      window.localStorage.setItem(
+        "pendingMetagraphResult",
+        JSON.stringify(buildMetagraphPayload("pending")),
+      );
+    }
   }, [
     aiResult,
     analysisFailed,
     buildLocalMetagraphResult,
+    buildMetagraphPayload,
     generatedImageUrl,
     isAnalyzing,
     step,
+    user,
   ]);
 
   const toggleImage = (image: string) => {
@@ -1485,7 +1536,9 @@ export default function Home() {
       return;
     }
 
-    if (!email.trim()) {
+    const trimmedEmail = email.trim();
+
+    if (!trimmedEmail) {
       setAuthMessage("Введите email.");
       return;
     }
@@ -1502,9 +1555,9 @@ export default function Home() {
       }
 
       const { error } = await supabase.auth.signInWithOtp({
-        email: email.trim(),
+        email: trimmedEmail,
         options: {
-          emailRedirectTo: window.location.origin,
+          shouldCreateUser: true,
         },
       });
 
@@ -1512,10 +1565,67 @@ export default function Home() {
         throw error;
       }
 
-      setAuthMessage("Проверьте почту и откройте ссылку для входа.");
+      setAuthEmail(trimmedEmail);
+      setAuthCode("");
+      setAuthStep("code");
+      setAuthMessage("Мы отправили код на ваш email. Введите его ниже.");
     } catch (error) {
-      console.error("Failed to send magic link.", error);
-      setAuthMessage("Не удалось отправить ссылку. Попробуйте ещё раз.");
+      console.error("Failed to send email code.", error);
+      setAuthMessage("Не удалось отправить код. Попробуйте ещё раз.");
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  async function verifyEmailCode() {
+    if (!supabase) {
+      setAuthMessage("Вход временно недоступен.");
+      return;
+    }
+
+    const trimmedEmail = authEmail.trim();
+    const trimmedCode = authCode.trim();
+
+    if (!trimmedEmail) {
+      setAuthStep("email");
+      setAuthMessage("Введите email.");
+      return;
+    }
+
+    if (!trimmedCode) {
+      setAuthMessage("Введите код из письма.");
+      return;
+    }
+
+    setAuthLoading(true);
+    setAuthMessage("");
+
+    try {
+      const { data, error } = await supabase.auth.verifyOtp({
+        email: trimmedEmail,
+        token: trimmedCode,
+        type: "email",
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      const currentSession = data.session ?? null;
+      const currentUser = data.user ?? currentSession?.user ?? null;
+
+      setSession(currentSession);
+      setUser(currentUser);
+      setAuthCode("");
+      setAuthMessage("Вы вошли. Метаграф сохранён.");
+
+      if (currentUser) {
+        await savePendingMetagraphResult(currentUser);
+        await loadReturningDashboard(currentUser);
+      }
+    } catch (error) {
+      console.error("Failed to verify email code.", error);
+      setAuthMessage("Код не подошёл. Проверьте письмо и попробуйте ещё раз.");
     } finally {
       setAuthLoading(false);
     }
@@ -1533,6 +1643,20 @@ export default function Home() {
     setOpenedSavedResult(null);
     setSaveMessage("");
     setSavedResultId(null);
+    setAuthStep("email");
+    setAuthCode("");
+    setIsAuthModalOpen(false);
+  }
+
+  function openProfileModal() {
+    setAuthMessage("");
+
+    if (!user) {
+      setAuthStep("email");
+      setAuthCode("");
+    }
+
+    setIsAuthModalOpen(true);
   }
 
   async function saveMetagraphResult() {
@@ -1544,6 +1668,8 @@ export default function Home() {
         JSON.stringify(buildMetagraphPayload("pending")),
       );
       setAuthMessage("Введите email, чтобы сохранить Метаграф.");
+      setAuthStep("email");
+      setAuthCode("");
       setIsAuthModalOpen(true);
       return null;
     }
@@ -2071,6 +2197,13 @@ export default function Home() {
       <>
         <main className="min-h-screen bg-[#F7F7F7] px-5 pb-12 pt-28 text-[#111111] sm:px-8">
           <BackButton onClick={goBack} />
+          <ProfileButton
+            email={profileEmail}
+            onClick={() => {
+              setStep("start");
+              openProfileModal();
+            }}
+          />
           <SmallLogo />
           <section className="mx-auto w-full max-w-4xl">
             <p className="text-sm font-medium text-zinc-500">Карта движения</p>
@@ -2099,6 +2232,8 @@ export default function Home() {
                       "movementProgressDraft",
                       JSON.stringify(getMovementDraft()),
                     );
+                    setAuthStep("email");
+                    setAuthCode("");
                     setStep("start");
                     setIsAuthModalOpen(true);
                   }}
@@ -2305,13 +2440,16 @@ export default function Home() {
             <p className="text-base leading-7 text-[#111111]/75">
               Вы вошли как {user.email ?? session?.user.email}
             </p>
-            <div className="flex flex-col gap-3 sm:flex-row">
+            <div className="flex flex-col gap-3">
               <button
                 type="button"
-                onClick={() => setIsAuthModalOpen(false)}
+                onClick={() => {
+                  setIsAuthModalOpen(false);
+                  openMyMetagraph();
+                }}
                 className="rounded-full border-2 border-[#85DCF6] bg-white px-5 py-3 text-base font-medium"
               >
-                Продолжить
+                Мой Метаграф
               </button>
               <button
                 type="button"
@@ -2320,6 +2458,13 @@ export default function Home() {
               >
                 Выйти
               </button>
+              <button
+                type="button"
+                onClick={() => setIsAuthModalOpen(false)}
+                className="rounded-full px-5 py-3 text-base font-medium underline underline-offset-4"
+              >
+                Закрыть
+              </button>
             </div>
           </div>
         ) : (
@@ -2327,27 +2472,69 @@ export default function Home() {
             className="mt-5 space-y-4"
             onSubmit={(event) => {
               event.preventDefault();
-              signInWithEmail(authEmail);
+              if (authStep === "email") {
+                signInWithEmail(authEmail);
+                return;
+              }
+
+              verifyEmailCode();
             }}
           >
-            <p className="text-base leading-7 text-[#111111]/75">
-              Введите email, чтобы вернуться к своему разбору и будущей карте
-              движения с любого устройства.
-            </p>
-            <input
-              type="email"
-              value={authEmail}
-              onChange={(event) => setAuthEmail(event.target.value)}
-              placeholder="Email"
-              className="w-full rounded-full border border-zinc-200 bg-white px-5 py-4 text-base outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200"
-            />
-            <button
-              type="submit"
-              disabled={authLoading}
-              className="w-full rounded-full border-2 border-[#85DCF6] bg-white px-5 py-4 text-base font-semibold disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {authLoading ? "Отправляем..." : "Получить ссылку для входа"}
-            </button>
+            {authStep === "email" ? (
+              <>
+                <p className="text-base leading-7 text-[#111111]/75">
+                  Введите email, чтобы сохранить разбор, карту перехода и
+                  прогресс с любого устройства.
+                </p>
+                <input
+                  type="email"
+                  value={authEmail}
+                  onChange={(event) => setAuthEmail(event.target.value)}
+                  placeholder="Email"
+                  className="w-full rounded-full border border-zinc-200 bg-white px-5 py-4 text-base outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200"
+                />
+                <button
+                  type="submit"
+                  disabled={authLoading}
+                  className="w-full rounded-full border-2 border-[#85DCF6] bg-white px-5 py-4 text-base font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {authLoading ? "Отправляем..." : "Получить код"}
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-base leading-7 text-[#111111]/75">
+                  Введите код из письма для {authEmail}.
+                </p>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  value={authCode}
+                  onChange={(event) => setAuthCode(event.target.value)}
+                  placeholder="Код из письма"
+                  className="w-full rounded-full border border-zinc-200 bg-white px-5 py-4 text-center text-base tracking-[0.24em] outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200"
+                />
+                <button
+                  type="submit"
+                  disabled={authLoading}
+                  className="w-full rounded-full border-2 border-[#85DCF6] bg-white px-5 py-4 text-base font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {authLoading ? "Проверяем..." : "Войти"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthStep("email");
+                    setAuthCode("");
+                    setAuthMessage("");
+                  }}
+                  className="w-full rounded-full px-5 py-3 text-sm font-medium underline underline-offset-4"
+                >
+                  Изменить email
+                </button>
+              </>
+            )}
           </form>
         )}
         {authMessage ? (
@@ -2487,6 +2674,7 @@ export default function Home() {
     return (
       <>
         <main className="min-h-screen bg-[#F7F7F7] px-5 pb-12 pt-10 text-[#111111] sm:px-8">
+          <ProfileButton email={profileEmail} onClick={openProfileModal} />
           <section className="mx-auto w-full max-w-4xl">
             <p className="text-sm font-medium text-zinc-500">Возвращение</p>
             <h1 className="mt-2 text-4xl font-semibold tracking-tight sm:text-6xl">
@@ -2506,6 +2694,8 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={() => {
+                    setAuthStep("email");
+                    setAuthCode("");
                     setStep("start");
                     setIsAuthModalOpen(true);
                   }}
@@ -2624,6 +2814,7 @@ export default function Home() {
       <>
       <main className="flex min-h-screen flex-1 justify-center bg-[#F7F7F7] px-6 pb-10 pt-28 text-zinc-950">
         <BackButton onClick={goBack} />
+        <ProfileButton email={profileEmail} onClick={openProfileModal} />
         <section className="mx-auto flex w-full max-w-3xl flex-col">
           <SmallLogo />
           {isAnalyzing ? (
@@ -2683,6 +2874,33 @@ export default function Home() {
                 )}
               </div>
 
+              <div className="mt-8 rounded-[28px] border border-[#85DCF6]/70 bg-white/75 p-6 shadow-sm">
+                <h2 className="text-2xl font-semibold tracking-tight">
+                  Сохранить мой Метаграф
+                </h2>
+                <p className="mt-3 text-base leading-7 text-zinc-600">
+                  Сохраните разбор, карту перехода и прогресс, чтобы вернуться
+                  к ним с любого устройства.
+                </p>
+                <button
+                  type="button"
+                  onClick={saveMetagraphResult}
+                  disabled={saveLoading}
+                  className="mt-5 w-full rounded-full border-2 border-[#85DCF6] bg-white px-6 py-3 text-base font-semibold text-[#111111] shadow-sm transition hover:border-[#6FD1EE] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                >
+                  {saveLoading
+                    ? "Сохраняем..."
+                    : user
+                      ? "Сохранить мой Метаграф"
+                      : "Сохранить через email"}
+                </button>
+                {saveMessage ? (
+                  <p className="mt-3 text-sm leading-6 text-zinc-500">
+                    {saveMessage}
+                  </p>
+                ) : null}
+              </div>
+
               <div className="mx-auto mt-8 flex w-full max-w-3xl flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-center">
                 <button
                   type="button"
@@ -2698,18 +2916,10 @@ export default function Home() {
                 >
                   Скопировать
                 </button>
-                <button
-                  type="button"
-                  onClick={saveMetagraphResult}
-                  disabled={saveLoading}
-                  className="rounded-full border border-[#85DCF6] bg-white px-6 py-3 text-base font-medium text-[#111111] shadow-sm transition hover:border-[#6FD1EE] disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {saveLoading ? "Сохраняем..." : "Сохранить мой Метаграф"}
-                </button>
               </div>
-              {saveMessage || resultDownloadHint || copyMessage ? (
+              {resultDownloadHint || copyMessage ? (
                 <p className="mt-3 text-center text-sm leading-6 text-zinc-500">
-                  {saveMessage || copyMessage || resultDownloadHint}
+                  {copyMessage || resultDownloadHint}
                 </p>
               ) : null}
               {savedResultId ? (
@@ -2772,8 +2982,10 @@ export default function Home() {
 
   if (step === "questions") {
     return (
+      <>
       <main className="flex min-h-screen flex-1 items-center justify-center bg-[#F7F7F7] px-6 pb-10 pt-28 text-zinc-950">
         <BackButton onClick={goBack} />
+        <ProfileButton email={profileEmail} onClick={openProfileModal} />
         <section className="mx-auto flex w-full max-w-2xl flex-col items-center text-center">
           <SmallLogo />
           <p className="text-sm font-medium text-zinc-500">
@@ -2799,13 +3011,18 @@ export default function Home() {
           </button>
         </section>
       </main>
+      {authModal}
+      {myMetagraphModal}
+      </>
     );
   }
 
   if (step === "images") {
     return (
+      <>
       <main className="flex min-h-screen flex-1 items-center justify-center bg-[#F7F7F7] pb-10 pt-28 text-zinc-950">
         <BackButton onClick={goBack} />
+        <ProfileButton email={profileEmail} onClick={openProfileModal} />
         <section className="flex w-full flex-col items-center text-center">
           <SmallLogo />
           <h1 className="max-w-sm px-6 text-xl font-medium leading-7 tracking-tight text-zinc-800 sm:max-w-xl sm:text-2xl">
@@ -2863,13 +3080,18 @@ export default function Home() {
           ) : null}
         </section>
       </main>
+      {authModal}
+      {myMetagraphModal}
+      </>
     );
   }
 
   if (step === "name") {
     return (
+      <>
       <main className="flex min-h-screen flex-1 items-center justify-center bg-[#F7F7F7] px-6 pb-10 pt-28 text-zinc-950">
         <BackButton onClick={goBack} />
+        <ProfileButton email={profileEmail} onClick={openProfileModal} />
         <section className="mx-auto flex w-full max-w-2xl flex-col items-center text-center">
           <SmallLogo />
           <h1 className="text-3xl font-semibold tracking-tight sm:text-5xl">
@@ -2892,13 +3114,18 @@ export default function Home() {
           </button>
         </section>
       </main>
+      {authModal}
+      {myMetagraphModal}
+      </>
     );
   }
 
   if (step === "gender") {
     return (
+      <>
       <main className="flex min-h-screen flex-1 items-center justify-center bg-[#F7F7F7] px-6 pb-10 pt-28 text-zinc-950">
         <BackButton onClick={goBack} />
+        <ProfileButton email={profileEmail} onClick={openProfileModal} />
         <section className="mx-auto flex max-w-2xl flex-col items-center text-center">
           <SmallLogo />
           <h1 className="text-3xl font-semibold tracking-tight sm:text-5xl">
@@ -2939,22 +3166,31 @@ export default function Home() {
           ) : null}
         </section>
       </main>
+      {authModal}
+      {myMetagraphModal}
+      </>
     );
   }
 
   if (step === "start" && !returningChecked) {
     return (
-      <main className="flex min-h-screen flex-1 items-center justify-center bg-[#F7F7F7] px-6 text-center text-zinc-950">
-        <p className="text-base font-medium text-zinc-500">
-          Метаграф проверяет ваш путь…
-        </p>
-      </main>
+      <>
+        <main className="flex min-h-screen flex-1 items-center justify-center bg-[#F7F7F7] px-6 text-center text-zinc-950">
+          <ProfileButton email={profileEmail} onClick={openProfileModal} />
+          <p className="text-base font-medium text-zinc-500">
+            Метаграф проверяет ваш путь…
+          </p>
+        </main>
+        {authModal}
+        {myMetagraphModal}
+      </>
     );
   }
 
   return (
     <>
       <main className="flex min-h-screen flex-1 justify-center bg-[#F7F7F7] px-6 text-zinc-950">
+        <ProfileButton email={profileEmail} onClick={openProfileModal} />
         <section className="mx-auto flex w-full max-w-5xl flex-col items-center pt-6 text-center">
           <Image
             src="/metagraph-logo.png"
@@ -2989,20 +3225,6 @@ export default function Home() {
             className="start-reveal mt-5 text-sm font-medium text-[#111111]/80 underline underline-offset-4 transition [animation-delay:360ms] hover:text-[#111111] sm:text-base lg:mt-3"
           >
             Что такое Метаграф
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (user) {
-                openMyMetagraph();
-                return;
-              }
-
-              setIsAuthModalOpen(true);
-            }}
-            className="start-reveal mt-3 text-xs font-medium text-[#111111]/60 underline underline-offset-4 transition [animation-delay:460ms] hover:text-[#111111] sm:text-sm"
-          >
-            {user ? "Мой Метаграф" : "Войти / сохранить Метаграф"}
           </button>
         </section>
       </main>
