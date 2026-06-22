@@ -1228,7 +1228,9 @@ export default function Home() {
       try {
         const { data, error } = await supabase
           .from("metagraph_results")
-          .select("id, created_at, name, role, source, analysis_text, image_url")
+          .select(
+            "id, created_at, name, gender, role, daimon, artifact, key_phrase, source, analysis_text, image_url, selected_images, answers",
+          )
           .eq("user_id", currentUser.id)
           .order("created_at", { ascending: false })
           .limit(10);
@@ -1554,6 +1556,20 @@ export default function Home() {
     step,
   ]);
 
+  useEffect(() => {
+    if (step !== "postTypingApp" || !user) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      loadSavedResults(user);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [loadSavedResults, step, user]);
+
   const toggleImage = (image: string) => {
     setSelectedImages((currentImages) => {
       if (currentImages.includes(image)) {
@@ -1810,6 +1826,17 @@ export default function Home() {
     try {
       await navigator.clipboard.writeText(result.analysis_text ?? "");
       setCopyMessage("Разбор скопирован");
+    } catch {
+      setCopyMessage("Не удалось скопировать автоматически. Выделите текст вручную.");
+    }
+  }
+
+  async function copyMetagraphCardText(cardText: string) {
+    setCopyMessage("");
+
+    try {
+      await navigator.clipboard.writeText(cardText);
+      setCopyMessage("Карточка скопирована");
     } catch {
       setCopyMessage("Не удалось скопировать автоматически. Выделите текст вручную.");
     }
@@ -2922,7 +2949,7 @@ export default function Home() {
     const appDate = appResult.created_at
       ? new Date(appResult.created_at).toLocaleDateString("ru-RU")
       : new Date().toLocaleDateString("ru-RU");
-    const appRole = appResult.role ?? inferMovementRole(appText);
+    const appRole = appResult.role ?? inferMovementRole(appText) ?? "Человек перехода";
     const appDaimon =
       appResult.daimon ??
       extractResultSection(appText, "Даймон") ??
@@ -2930,7 +2957,7 @@ export default function Home() {
     const appArtifact =
       appResult.artifact ??
       extractResultSection(appText, "Артефакт перехода") ??
-      "Жетон первого следа";
+      "Артефакт перехода";
     const appKeyPhrase =
       appResult.key_phrase ??
       extractResultSection(appText, "Фраза-ключ") ??
@@ -2941,6 +2968,8 @@ export default function Home() {
     const appProgressPercent = appSteps.length
       ? Math.round((appCompletedCount / appSteps.length) * 100)
       : 0;
+    const metagraphArchive =
+      savedResults.length > 0 ? savedResults : appResult.analysis_text ? [appResult] : [];
     const appActiveStep =
       appSteps[currentMovementStep] ?? appSteps[0] ?? {
         id: "first-trace",
@@ -2949,6 +2978,12 @@ export default function Home() {
         task: "Выберите один первый след на 15 минут и выполните его без требования результата.",
         status: "active" as const,
       };
+    const metagraphCardText = `${appName}
+Образ силы: ${appRole}
+Даймон: ${appDaimon.split("\n")[0]}
+Артефакт: ${appArtifact.split("\n")[0]}
+Фраза-ключ: ${appKeyPhrase.split("\n")[0]}
+Прогресс: ${appCompletedCount} из ${appSteps.length || 7}`;
     const openEmailSave = () => {
       window.localStorage.setItem(
         "pendingMetagraphResult",
@@ -2963,6 +2998,25 @@ export default function Home() {
       setAuthCode("");
       setAuthMessage("Введите email, чтобы сохранить Метаграф.");
       setIsAuthModalOpen(true);
+    };
+    const openSavedMetagraphInApp = async (result: SavedMetagraphResult) => {
+      const resultText = result.analysis_text ?? "";
+      const resultId =
+        result.id.startsWith("local") || result.id === "pending" ? null : result.id;
+      const context: MovementContext = {
+        resultId,
+        name: result.name ?? "Метаграф",
+        analysisText: resultText,
+        imageUrl: result.image_url ?? null,
+        role: result.role ?? inferMovementRole(resultText),
+        source: result.source ?? null,
+        returnTo: "dashboard",
+      };
+
+      setReturningResult(result);
+      setReturningProgress(null);
+      await loadMovementProgress(context, generateMovementSteps(resultText));
+      setPostTypingTab("metagraph");
     };
 
     return (
@@ -2998,6 +3052,54 @@ export default function Home() {
                   <p className="mt-3 text-xl font-semibold leading-7">
                     {appDaimon.split("\n")[0]}
                   </p>
+                </div>
+
+                <div className="grid gap-4">
+                  <div className="rounded-[28px] border border-black/5 bg-white/80 p-5 shadow-sm">
+                    <p className="text-sm font-medium text-zinc-500">Моя сборка</p>
+                    <h2 className="mt-2 text-2xl font-semibold">{appRole}</h2>
+                    <p className="mt-3 text-sm leading-6 text-zinc-600">
+                      {appDaimon.split("\n")[0]}
+                    </p>
+                    <p className="mt-3 rounded-3xl bg-[#F7F7F7] px-4 py-3 text-sm font-medium leading-6">
+                      {appKeyPhrase.split("\n")[0]}
+                    </p>
+                  </div>
+
+                  <div className="rounded-[28px] border border-black/5 bg-white/80 p-5 shadow-sm">
+                    <p className="text-sm font-medium text-zinc-500">Мой путь</p>
+                    <div className="mt-3 h-3 overflow-hidden rounded-full bg-zinc-200">
+                      <div
+                        className="h-full rounded-full bg-[#85DCF6] transition-all duration-500"
+                        style={{ width: `${appProgressPercent}%` }}
+                      />
+                    </div>
+                    <p className="mt-3 text-sm text-zinc-600">
+                      {appCompletedCount} из {appSteps.length || 7} шагов собрано
+                    </p>
+                    <h3 className="mt-2 text-xl font-semibold">{appActiveStep.title}</h3>
+                    <button
+                      type="button"
+                      onClick={() => setPostTypingTab("path")}
+                      className="mt-4 rounded-full border-2 border-[#85DCF6] bg-white px-5 py-2.5 text-sm font-semibold"
+                    >
+                      Открыть карту
+                    </button>
+                  </div>
+
+                  <div className="rounded-[28px] border border-[#85DCF6]/70 bg-white/80 p-5 shadow-sm">
+                    <p className="text-sm font-medium text-zinc-500">Мои Метаграфы</p>
+                    <p className="mt-2 text-base font-semibold">
+                      Последний Метаграф: {appDate}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={startNewSlice}
+                      className="mt-4 rounded-full bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white"
+                    >
+                      Пройти ещё раз
+                    </button>
+                  </div>
                 </div>
 
                 <div className="rounded-[28px] border border-black/5 bg-white/75 p-5 shadow-sm">
@@ -3091,7 +3193,7 @@ export default function Home() {
                     onClick={startNewSlice}
                     className="rounded-full border border-zinc-200 bg-white px-5 py-3 font-medium"
                   >
-                    Новый срез
+                    Пройти ещё раз
                   </button>
                 </div>
                 {copyMessage || resultDownloadHint ? (
@@ -3206,11 +3308,26 @@ export default function Home() {
                 </div>
                 <div className="rounded-[28px] border border-black/5 bg-white/75 p-5 shadow-sm">
                   <h2 className="text-2xl font-semibold">Дневник перехода</h2>
+                  <p className="mt-3 text-base leading-7 text-zinc-600">
+                    Запишите, что изменилось после шага. Не нужно писать красиво —
+                    важно заметить движение.
+                  </p>
+                  <div className="mt-4 flex flex-wrap gap-2 text-xs font-medium text-zinc-500">
+                    <span className="rounded-full bg-[#F7F7F7] px-3 py-2">
+                      Где стало легче?
+                    </span>
+                    <span className="rounded-full bg-[#F7F7F7] px-3 py-2">
+                      Где появилось сопротивление?
+                    </span>
+                    <span className="rounded-full bg-[#F7F7F7] px-3 py-2">
+                      Какой маленький шаг я сделал?
+                    </span>
+                  </div>
                   <textarea
                     value={movementDiaryText}
                     onChange={(event) => setMovementDiaryText(event.target.value)}
                     rows={5}
-                    placeholder="Что я заметил? Где стало легче? Где появилось сопротивление?"
+                    placeholder="Что я сегодня заметил?"
                     className="mt-5 w-full resize-none rounded-3xl border border-zinc-200 bg-white px-5 py-4 text-base leading-7 outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200"
                   />
                   <button
@@ -3239,13 +3356,165 @@ export default function Home() {
 
             {postTypingTab === "profile" ? (
               <section className="mt-8 space-y-5">
-                <div className="rounded-[32px] border border-black/5 bg-white/75 p-6 shadow-sm">
-                  <h2 className="text-3xl font-semibold tracking-tight">Профиль</h2>
-                  {user ? (
-                    <div className="mt-5 space-y-4">
-                      <p className="text-base leading-7 text-zinc-700">
-                        Вы вошли как {user.email ?? session?.user.email}
+                <div className="overflow-hidden rounded-[32px] bg-zinc-950 p-6 text-white shadow-[0_24px_80px_rgba(17,17,17,0.22)]">
+                  <p className="text-sm font-medium uppercase tracking-[0.2em] text-white/45">
+                    Паспорт
+                  </p>
+                  <h2 className="mt-2 text-3xl font-semibold tracking-tight">
+                    Мой профиль Метаграфа
+                  </h2>
+                  <div className="mt-6 space-y-3 text-sm leading-6 text-white/78">
+                    <div className="flex justify-between gap-4 border-b border-white/10 pb-3">
+                      <span className="text-white/45">Имя</span>
+                      <span className="text-right font-medium text-white">{appName}</span>
+                    </div>
+                    {profileEmail ? (
+                      <div className="flex justify-between gap-4 border-b border-white/10 pb-3">
+                        <span className="text-white/45">Email</span>
+                        <span className="text-right font-medium text-white">
+                          {profileEmail}
+                        </span>
+                      </div>
+                    ) : null}
+                    <div className="flex justify-between gap-4 border-b border-white/10 pb-3">
+                      <span className="text-white/45">Дата последнего Метаграфа</span>
+                      <span className="text-right font-medium text-white">{appDate}</span>
+                    </div>
+                    <div className="flex justify-between gap-4 border-b border-white/10 pb-3">
+                      <span className="text-white/45">Образ силы</span>
+                      <span className="text-right font-medium text-white">{appRole}</span>
+                    </div>
+                    <div className="border-b border-white/10 pb-3">
+                      <span className="text-white/45">Даймон</span>
+                      <p className="mt-1 font-medium text-white">
+                        {appDaimon.split("\n")[0]}
                       </p>
+                    </div>
+                    <div className="border-b border-white/10 pb-3">
+                      <span className="text-white/45">Артефакт</span>
+                      <p className="mt-1 font-medium text-white">
+                        {appArtifact.split("\n")[0]}
+                      </p>
+                    </div>
+                    <div className="border-b border-white/10 pb-3">
+                      <span className="text-white/45">Фраза-ключ</span>
+                      <p className="mt-1 font-medium text-white">
+                        {appKeyPhrase.split("\n")[0]}
+                      </p>
+                    </div>
+                    <div className="flex justify-between gap-4 border-b border-white/10 pb-3">
+                      <span className="text-white/45">Текущий шаг</span>
+                      <span className="text-right font-medium text-white">
+                        {appActiveStep.title}
+                      </span>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <span className="text-white/45">Прогресс</span>
+                      <span className="text-right font-medium text-white">
+                        {appCompletedCount} из {appSteps.length || 7}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-[32px] border border-[#85DCF6]/70 bg-white/85 p-6 shadow-sm">
+                  <p className="text-sm font-medium text-zinc-500">Мой образ</p>
+                  <h2 className="mt-2 text-3xl font-semibold tracking-tight">
+                    {appName}
+                  </h2>
+                  <div className="mt-5 space-y-3 text-sm leading-6 text-zinc-700">
+                    <p>
+                      <strong className="text-[#111111]">Образ силы:</strong>{" "}
+                      {appRole}
+                    </p>
+                    <p>
+                      <strong className="text-[#111111]">Даймон:</strong>{" "}
+                      {appDaimon.split("\n")[0]}
+                    </p>
+                    <p>
+                      <strong className="text-[#111111]">Артефакт:</strong>{" "}
+                      {appArtifact.split("\n")[0]}
+                    </p>
+                    <p>
+                      <strong className="text-[#111111]">Фраза-ключ:</strong>{" "}
+                      {appKeyPhrase.split("\n")[0]}
+                    </p>
+                    <p>
+                      <strong className="text-[#111111]">Прогресс:</strong>{" "}
+                      {appCompletedCount} из {appSteps.length || 7}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => copyMetagraphCardText(metagraphCardText)}
+                    className="mt-5 w-full rounded-full border-2 border-[#85DCF6] bg-white px-6 py-3 font-semibold"
+                  >
+                    Скопировать карточку
+                  </button>
+                  {copyMessage ? (
+                    <p className="mt-3 text-center text-sm text-zinc-500">
+                      {copyMessage}
+                    </p>
+                  ) : null}
+                </div>
+
+                <div className="rounded-[32px] border border-black/5 bg-white/80 p-6 shadow-sm">
+                  <h2 className="text-2xl font-semibold tracking-tight">
+                    Мои Метаграфы
+                  </h2>
+                  {savedResultsLoading ? (
+                    <p className="mt-4 text-sm text-zinc-500">
+                      Загружаем сохранённые Метаграфы…
+                    </p>
+                  ) : metagraphArchive.length > 0 ? (
+                    <div className="mt-5 space-y-3">
+                      {metagraphArchive.slice(0, 5).map((result) => (
+                        <div
+                          key={result.id}
+                          className="rounded-3xl bg-[#F7F7F7] p-4 text-sm leading-6"
+                        >
+                          <p className="text-zinc-500">
+                            {result.created_at
+                              ? new Date(result.created_at).toLocaleDateString("ru-RU")
+                              : "На этом устройстве"}
+                          </p>
+                          <h3 className="mt-1 text-lg font-semibold">
+                            {result.name || "Метаграф"}
+                          </h3>
+                          <p className="mt-1 text-zinc-600">
+                            {result.role || inferMovementRole(result.analysis_text ?? "")}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => openSavedMetagraphInApp(result)}
+                            className="mt-3 rounded-full border border-[#85DCF6] bg-white px-4 py-2 text-sm font-medium"
+                          >
+                            Открыть
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-4 text-sm text-zinc-500">
+                      Здесь появятся ваши сохранённые Метаграфы.
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={startNewSlice}
+                    className="mt-5 w-full rounded-full bg-zinc-950 px-6 py-3 font-semibold text-white"
+                  >
+                    Пройти ещё раз
+                  </button>
+                  <p className="mt-3 text-sm leading-6 text-zinc-500">
+                    Можно пройти Метаграф заново, когда почувствуете, что
+                    состояние изменилось.
+                  </p>
+                </div>
+
+                <div className="rounded-[32px] border border-black/5 bg-white/75 p-6 shadow-sm">
+                  {user ? (
+                    <div className="space-y-4">
                       <p className="rounded-3xl bg-[#85DCF6]/20 px-5 py-4 font-medium">
                         Метаграф сохранён
                       </p>
@@ -3258,7 +3527,7 @@ export default function Home() {
                       </button>
                     </div>
                   ) : (
-                    <div className="mt-5 space-y-4">
+                    <div className="space-y-4">
                       <p className="text-base leading-7 text-zinc-700">
                         Сейчас Метаграф сохранён только на этом устройстве.
                         Войдите по email, чтобы не потерять его и открыть с
@@ -3273,13 +3542,6 @@ export default function Home() {
                       </button>
                     </div>
                   )}
-                  <button
-                    type="button"
-                    onClick={startNewSlice}
-                    className="mt-4 w-full rounded-full bg-zinc-950 px-6 py-3 font-semibold text-white"
-                  >
-                    Пройти новый срез
-                  </button>
                 </div>
               </section>
             ) : null}
@@ -3435,7 +3697,7 @@ export default function Home() {
                 onClick={startNewSlice}
                 className="rounded-full border border-zinc-200 bg-white px-6 py-3 font-medium"
               >
-                Пройти новый срез
+                Пройти ещё раз
               </button>
               {user ? (
                 <button
