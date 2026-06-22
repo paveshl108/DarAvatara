@@ -112,6 +112,11 @@ const archetypes = [
 type ChoiceImage = (typeof choiceImages)[number];
 type Gender = "male" | "female" | null;
 
+const genderLabels: Record<Exclude<Gender, null>, string> = {
+  male: "Мужчина",
+  female: "Женщина",
+};
+
 function formatName(value: string) {
   const trimmedName = value.trim();
 
@@ -134,6 +139,18 @@ function SmallLogo() {
         className="h-auto w-[72px]"
       />
     </div>
+  );
+}
+
+function BackButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="fixed left-4 top-4 z-20 rounded-full px-4 py-3 text-sm font-medium text-[#111111] transition hover:bg-white/70 sm:left-6 sm:top-6"
+    >
+      ← Назад
+    </button>
   );
 }
 
@@ -544,6 +561,8 @@ export default function Home() {
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [downloadHint, setDownloadHint] = useState("");
+  const [resultDownloadHint, setResultDownloadHint] = useState("");
+  const [copyMessage, setCopyMessage] = useState("");
   const metagraphResult = useMemo(
     () =>
       generateMetagraphResult({
@@ -697,8 +716,172 @@ export default function Home() {
       return;
     }
 
-    setQuestionIndex((currentIndex) => currentIndex + 1);
+    const nextQuestionIndex = questionIndex + 1;
+
+    setQuestionIndex(nextQuestionIndex);
+    setCurrentAnswer(nextAnswers[nextQuestionIndex] ?? "");
   };
+
+  const saveCurrentQuestionDraft = () => {
+    if (step !== "questions") {
+      return;
+    }
+
+    setAnswers((currentAnswers) => {
+      const nextAnswers = [...currentAnswers];
+
+      nextAnswers[questionIndex] = currentAnswer.trim();
+      return nextAnswers;
+    });
+  };
+
+  const goBack = () => {
+    if (step === "gender") {
+      setStep("start");
+      return;
+    }
+
+    if (step === "name") {
+      setStep("gender");
+      return;
+    }
+
+    if (step === "images") {
+      setStep("name");
+      return;
+    }
+
+    if (step === "questions") {
+      saveCurrentQuestionDraft();
+
+      if (questionIndex > 0) {
+        const previousQuestionIndex = questionIndex - 1;
+
+        setQuestionIndex(previousQuestionIndex);
+        setCurrentAnswer(answers[previousQuestionIndex] ?? "");
+        return;
+      }
+
+      setStep("images");
+      return;
+    }
+
+    if (step === "result") {
+      setStep("questions");
+      setQuestionIndex(questions.length - 1);
+      setCurrentAnswer(answers[questions.length - 1] ?? "");
+    }
+  };
+
+  const getSafeResultFileName = () => {
+    const safeName = name
+      .trim()
+      .toLowerCase()
+      .replace(/ё/g, "е")
+      .replace(/[^a-zа-я0-9_-]+/gi, "-")
+      .replace(/^-+|-+$/g, "");
+
+    return safeName ? `metagraph-${safeName}.txt` : "metagraph-result.txt";
+  };
+
+  const getFullResultText = () => {
+    const resultText = aiResult && !analysisFailed ? aiResult : fallbackResult;
+    const selectedImageLines = selectedImageDetails
+      .map((image) =>
+        image ? `${image.order}. ${image.name} — ${image.role}` : null,
+      )
+      .filter(Boolean)
+      .join("\n");
+    const answerLines = questions
+      .map((question, index) => `${question}: ${answers[index] ?? ""}`)
+      .join("\n");
+
+    return [
+      "Метаграф-разбор",
+      "",
+      `Имя: ${formatName(name)}`,
+      `Пол: ${selectedGender ? genderLabels[selectedGender] : "Не указан"}`,
+      "",
+      "Выбранные образы:",
+      selectedImageLines || "Не выбраны",
+      "",
+      "Ответы:",
+      answerLines,
+      "",
+      "Разбор:",
+      resultText,
+    ].join("\n");
+  };
+
+  async function downloadResultText() {
+    const resultText = getFullResultText();
+    const fileName = getSafeResultFileName();
+
+    setResultDownloadHint("");
+
+    try {
+      const blob = new Blob([resultText], { type: "text/plain;charset=utf-8" });
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+
+      link.href = objectUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      try {
+        const file = new File([resultText], fileName, {
+          type: "text/plain;charset=utf-8",
+        });
+
+        if (navigator.canShare?.({ files: [file] })) {
+          await navigator.share({
+            title: "Метаграф-разбор",
+            text: "Ваш Метаграф-разбор",
+            files: [file],
+          });
+          return;
+        }
+
+        if (navigator.share) {
+          await navigator.share({
+            title: "Метаграф-разбор",
+            text: resultText,
+          });
+          return;
+        }
+
+        const textWindow = window.open("", "_blank", "noopener,noreferrer");
+
+        if (textWindow) {
+          textWindow.document.write(`<pre>${escapeSvgText(resultText)}</pre>`);
+          textWindow.document.close();
+          return;
+        }
+
+        setResultDownloadHint(
+          "Если файл не скачался, зажмите текст и сохраните или скопируйте его.",
+        );
+      } catch {
+        setResultDownloadHint(
+          "Если файл не скачался, зажмите текст и сохраните или скопируйте его.",
+        );
+      }
+    }
+  }
+
+  async function copyResultText() {
+    setCopyMessage("");
+
+    try {
+      await navigator.clipboard.writeText(getFullResultText());
+      setCopyMessage("Разбор скопирован");
+    } catch {
+      setCopyMessage("Не удалось скопировать автоматически. Выделите текст вручную.");
+    }
+  }
 
   async function downloadImage(imageUrl: string) {
     setDownloadHint("");
@@ -726,6 +909,7 @@ export default function Home() {
 
     return (
       <main className="flex min-h-screen flex-1 justify-center bg-[#F7F7F7] px-6 pb-10 pt-28 text-zinc-950">
+        <BackButton onClick={goBack} />
         <section className="mx-auto flex w-full max-w-3xl flex-col">
           <SmallLogo />
           {isAnalyzing ? (
@@ -785,6 +969,28 @@ export default function Home() {
                 )}
               </div>
 
+              <div className="mx-auto mt-8 flex w-full max-w-lg flex-col gap-3 sm:flex-row sm:justify-center">
+                <button
+                  type="button"
+                  onClick={downloadResultText}
+                  className="rounded-full border-2 border-[#85DCF6] bg-white px-6 py-3 text-base font-medium text-[#111111] shadow-sm transition hover:border-[#6FD1EE]"
+                >
+                  Скачать разбор
+                </button>
+                <button
+                  type="button"
+                  onClick={copyResultText}
+                  className="rounded-full border border-[#85DCF6] bg-white px-6 py-3 text-base font-medium text-[#111111] shadow-sm transition hover:border-[#6FD1EE]"
+                >
+                  Скопировать
+                </button>
+              </div>
+              {resultDownloadHint || copyMessage ? (
+                <p className="mt-3 text-center text-sm leading-6 text-zinc-500">
+                  {copyMessage || resultDownloadHint}
+                </p>
+              ) : null}
+
               {isImageModalOpen && generatedImageUrl ? (
                 <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/80 px-5 py-8">
                   <button
@@ -830,6 +1036,7 @@ export default function Home() {
   if (step === "questions") {
     return (
       <main className="flex min-h-screen flex-1 items-center justify-center bg-[#F7F7F7] px-6 pb-10 pt-28 text-zinc-950">
+        <BackButton onClick={goBack} />
         <section className="mx-auto flex w-full max-w-2xl flex-col items-center text-center">
           <SmallLogo />
           <p className="text-sm font-medium text-zinc-500">
@@ -861,6 +1068,7 @@ export default function Home() {
   if (step === "images") {
     return (
       <main className="flex min-h-screen flex-1 items-center justify-center bg-[#F7F7F7] pb-10 pt-28 text-zinc-950">
+        <BackButton onClick={goBack} />
         <section className="flex w-full flex-col items-center text-center">
           <SmallLogo />
           <h1 className="max-w-sm px-6 text-xl font-medium leading-7 tracking-tight text-zinc-800 sm:max-w-xl sm:text-2xl">
@@ -906,7 +1114,11 @@ export default function Home() {
           {selectedImages.length === 3 ? (
             <button
               type="button"
-              onClick={() => setStep("questions")}
+              onClick={() => {
+                setQuestionIndex(0);
+                setCurrentAnswer(answers[0] ?? "");
+                setStep("questions");
+              }}
               className="mt-10 rounded-full bg-zinc-950 px-8 py-3 text-base font-medium text-white shadow-sm transition-colors hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-950 focus:ring-offset-2 focus:ring-offset-[#F7F7F7]"
             >
               Далее
@@ -920,6 +1132,7 @@ export default function Home() {
   if (step === "name") {
     return (
       <main className="flex min-h-screen flex-1 items-center justify-center bg-[#F7F7F7] px-6 pb-10 pt-28 text-zinc-950">
+        <BackButton onClick={goBack} />
         <section className="mx-auto flex w-full max-w-2xl flex-col items-center text-center">
           <SmallLogo />
           <h1 className="text-3xl font-semibold tracking-tight sm:text-5xl">
@@ -948,6 +1161,7 @@ export default function Home() {
   if (step === "gender") {
     return (
       <main className="flex min-h-screen flex-1 items-center justify-center bg-[#F7F7F7] px-6 pb-10 pt-28 text-zinc-950">
+        <BackButton onClick={goBack} />
         <section className="mx-auto flex max-w-2xl flex-col items-center text-center">
           <SmallLogo />
           <h1 className="text-3xl font-semibold tracking-tight sm:text-5xl">
@@ -994,7 +1208,7 @@ export default function Home() {
   return (
     <>
       <main className="flex min-h-screen flex-1 justify-center bg-[#F7F7F7] px-6 text-zinc-950">
-        <section className="mx-auto flex w-full max-w-2xl flex-col items-center pt-6 text-center">
+        <section className="mx-auto flex w-full max-w-5xl flex-col items-center pt-6 text-center">
           <Image
             src="/metagraph-logo.png"
             alt="Логотип Метаграф"
@@ -1002,22 +1216,30 @@ export default function Home() {
             height={2358}
             priority
             sizes="43vh"
-            className="h-[45vh] w-auto"
+            className="start-reveal h-[38vh] w-auto sm:h-[42vh]"
           />
-          <h1 className="mt-6 text-4xl font-semibold tracking-tight sm:text-6xl">
-            Метаграф
+          <h1
+            className="start-reveal mt-5 max-w-[980px] text-center text-[clamp(2rem,8.4vw,4.5rem)] font-semibold uppercase leading-[0.98] tracking-[-0.03em] text-[#111111] [animation-delay:120ms] sm:mt-7 sm:leading-[0.96]"
+            style={{ fontFamily: '"Lagonic", "Laqonic", "Manrope", sans-serif' }}
+          >
+            <span className="block">Глубокая персональная</span>
+            <span className="block">распаковка человека</span>
+            <span className="block">
+              и его следующего уровня
+              <span className="text-[#85DCF6]">.</span>
+            </span>
           </h1>
           <button
             type="button"
             onClick={() => setStep("gender")}
-            className="mt-10 w-full max-w-[500px] rounded-full border-2 border-[#85DCF6] bg-white px-10 py-5 text-center text-[21px] font-semibold text-[#111111] shadow-[0_12px_36px_rgba(17,17,17,0.06)] transition duration-200 hover:border-[#6FD1EE] hover:shadow-[0_16px_42px_rgba(17,17,17,0.08)] active:scale-[0.99] sm:py-7 sm:text-[26px]"
+            className="start-reveal mt-12 w-full max-w-[500px] rounded-full border-2 border-[#85DCF6] bg-white px-10 py-5 text-center text-[21px] font-semibold text-[#111111] shadow-[0_12px_36px_rgba(17,17,17,0.06)] transition duration-200 [animation-delay:240ms] hover:border-[#6FD1EE] hover:shadow-[0_16px_42px_rgba(17,17,17,0.08)] active:scale-[0.99] sm:mt-14 sm:py-7 sm:text-[26px]"
           >
             Начать
           </button>
           <button
             type="button"
             onClick={() => setIsAboutOpen(true)}
-            className="mt-5 text-sm font-medium text-[#111111]/80 underline underline-offset-4 transition hover:text-[#111111] sm:text-base"
+            className="start-reveal mt-5 text-sm font-medium text-[#111111]/80 underline underline-offset-4 transition [animation-delay:360ms] hover:text-[#111111] sm:text-base"
           >
             Что такое Метаграф
           </button>
