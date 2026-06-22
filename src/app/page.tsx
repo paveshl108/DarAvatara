@@ -148,6 +148,15 @@ type MovementContext = {
   source: string | null;
   returnTo: "result" | "saved" | "dashboard";
 };
+type PostTypingTab = "home" | "metagraph" | "path" | "tasks" | "profile";
+
+const postTypingTabs: { id: PostTypingTab; label: string }[] = [
+  { id: "home", label: "Главная" },
+  { id: "metagraph", label: "Метаграф" },
+  { id: "path", label: "Путь" },
+  { id: "tasks", label: "Задания" },
+  { id: "profile", label: "Профиль" },
+];
 
 const genderLabels: Record<Exclude<Gender, null>, string> = {
   male: "Мужчина",
@@ -227,6 +236,109 @@ function ProfileButton({
         </svg>
       )}
     </button>
+  );
+}
+
+function AppTabIcon({ tab }: { tab: PostTypingTab }) {
+  if (tab === "home") {
+    return (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M4 11.5 12 5l8 6.5V20H4v-8.5Z" stroke="currentColor" strokeWidth="1.8" />
+      </svg>
+    );
+  }
+
+  if (tab === "metagraph") {
+    return (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="12" cy="12" r="7" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="1.4" />
+      </svg>
+    );
+  }
+
+  if (tab === "path") {
+    return (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path
+          d="M6 18c4-1 2-11 7-11 3 0 3 4 6 3"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeWidth="1.8"
+        />
+        <circle cx="6" cy="18" r="2" fill="currentColor" />
+        <circle cx="19" cy="10" r="2" fill="currentColor" />
+      </svg>
+    );
+  }
+
+  if (tab === "tasks") {
+    return (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M7 7h10M7 12h10M7 17h6" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
+        <rect x="4" y="4" width="16" height="16" rx="4" stroke="currentColor" strokeWidth="1.6" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="8" r="4" stroke="currentColor" strokeWidth="1.8" />
+      <path
+        d="M5 20c1.4-3.2 4-5 7-5s5.6 1.8 7 5"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.8"
+      />
+    </svg>
+  );
+}
+
+function BottomNavigation({
+  activeTab,
+  onChange,
+}: {
+  activeTab: PostTypingTab;
+  onChange: (tab: PostTypingTab) => void;
+}) {
+  return (
+    <nav className="fixed inset-x-0 bottom-0 z-40 mx-auto h-[74px] border-t border-black/10 bg-white/85 px-2 pb-2 pt-2 shadow-[0_-14px_40px_rgba(17,17,17,0.08)] backdrop-blur-xl sm:max-w-[520px] sm:rounded-t-[28px] sm:border-x">
+      <div className="mx-auto grid h-full max-w-[520px] grid-cols-5 gap-1">
+        {postTypingTabs.map((tab) => {
+          const isActive = activeTab === tab.id;
+
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => onChange(tab.id)}
+              className={`flex flex-col items-center justify-center gap-1 rounded-2xl text-[11px] font-medium transition ${
+                isActive
+                  ? "bg-[#85DCF6]/20 text-[#111111]"
+                  : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"
+              }`}
+            >
+              <span className={isActive ? "text-[#28BFEA]" : ""}>
+                <AppTabIcon tab={tab.id} />
+              </span>
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+    </nav>
+  );
+}
+
+function DaimonOrb() {
+  return (
+    <div className="relative mx-auto flex h-48 w-48 items-center justify-center overflow-hidden rounded-full bg-zinc-950 shadow-[0_28px_90px_rgba(17,17,17,0.28)]">
+      <div className="absolute inset-4 rounded-full bg-[radial-gradient(circle_at_35%_30%,rgba(133,220,246,0.95),rgba(213,255,93,0.48)_36%,rgba(148,88,255,0.38)_64%,transparent_72%)] blur-sm" />
+      <div className="absolute h-32 w-32 rounded-full border border-white/45 blur-[1px]" />
+      <div className="absolute h-24 w-44 rotate-45 rounded-full border border-[#85DCF6]/50" />
+      <div className="absolute h-20 w-40 -rotate-45 rounded-full border border-lime-200/50" />
+      <div className="relative h-12 w-12 rounded-full bg-white/90 shadow-[0_0_48px_rgba(255,255,255,0.9)]" />
+    </div>
   );
 }
 
@@ -813,6 +925,21 @@ function generateMovementSteps(resultText: string, answers: string[] = []) {
   return steps;
 }
 
+function getDecoratedMovementSteps(
+  steps: MovementStep[],
+  completedSteps: string[],
+  currentStep: number,
+): MovementStep[] {
+  return steps.map((movementStep, index) => ({
+    ...movementStep,
+    status: completedSteps.includes(movementStep.id)
+      ? "completed"
+      : index === currentStep
+        ? "active"
+        : "locked",
+  }));
+}
+
 export default function Home() {
   const [step, setStep] = useState<
     | "start"
@@ -822,6 +949,7 @@ export default function Home() {
     | "questions"
     | "result"
     | "returningDashboard"
+    | "postTypingApp"
     | "transitionMap"
   >("start");
   const [selectedGender, setSelectedGender] = useState<
@@ -871,6 +999,7 @@ export default function Home() {
   const [returningProgress, setReturningProgress] =
     useState<MovementProgressRecord | null>(null);
   const [returningChecked, setReturningChecked] = useState(false);
+  const [postTypingTab, setPostTypingTab] = useState<PostTypingTab>("home");
   const metagraphResult = useMemo(
     () =>
       generateMetagraphResult({
@@ -984,6 +1113,29 @@ export default function Home() {
       selectedGender,
       selectedImageDetails,
     ],
+  );
+  const buildMetagraphPayloadFromSavedResult = useCallback(
+    (result: SavedMetagraphResult, userId: string) => ({
+      user_id: userId,
+      name: result.name ?? "Метаграф",
+      gender: result.gender ?? null,
+      selected_images: result.selected_images ?? [],
+      answers: result.answers ?? [],
+      analysis_text: result.analysis_text ?? "",
+      image_prompt: null,
+      image_url: result.image_url ?? null,
+      role: result.role ?? null,
+      daimon:
+        result.daimon ?? extractResultSection(result.analysis_text ?? "", "Даймон"),
+      artifact:
+        result.artifact ??
+        extractResultSection(result.analysis_text ?? "", "Артефакт перехода"),
+      key_phrase:
+        result.key_phrase ??
+        extractResultSection(result.analysis_text ?? "", "Фраза-ключ"),
+      source: result.source ?? "local",
+    }),
+    [],
   );
 
   const insertMetagraphPayload = useCallback(
@@ -1130,7 +1282,8 @@ export default function Home() {
 
           setReturningResult(savedResult);
           setReturningProgress((progressData as MovementProgressRecord | null) ?? null);
-          setStep("returningDashboard");
+          setPostTypingTab("home");
+          setStep("postTypingApp");
           setReturningChecked(true);
           return;
         }
@@ -1153,7 +1306,8 @@ export default function Home() {
               ? (JSON.parse(localProgress) as MovementProgressRecord)
               : null,
           );
-          setStep("returningDashboard");
+          setPostTypingTab("home");
+          setStep("postTypingApp");
           setReturningChecked(true);
           return;
         } catch {
@@ -1319,6 +1473,85 @@ export default function Home() {
     isAnalyzing,
     step,
     user,
+  ]);
+
+  useEffect(() => {
+    if (
+      step !== "result" ||
+      isAnalyzing ||
+      !generatedImageUrl ||
+      (!aiResult && !analysisFailed)
+    ) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setReturningResult(buildLocalMetagraphResult());
+      setReturningProgress(null);
+      setPostTypingTab("home");
+      setStep("postTypingApp");
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [
+    aiResult,
+    analysisFailed,
+    buildLocalMetagraphResult,
+    generatedImageUrl,
+    isAnalyzing,
+    step,
+  ]);
+
+  useEffect(() => {
+    if (step !== "postTypingApp" || !returningResult) {
+      return;
+    }
+
+    const resultText = returningResult.analysis_text ?? "";
+
+    if (movementContext?.analysisText === resultText && movementSteps.length > 0) {
+      return;
+    }
+
+    const context: MovementContext = {
+      resultId: returningResult.id ?? null,
+      name: returningResult.name ?? "Метаграф",
+      analysisText: resultText,
+      imageUrl: returningResult.image_url ?? null,
+      role: returningResult.role ?? inferMovementRole(resultText),
+      source: returningResult.source ?? null,
+      returnTo: "dashboard",
+    };
+    const baseSteps = returningProgress?.steps?.length
+      ? returningProgress.steps
+      : generateMovementSteps(resultText);
+    const completedSteps = returningProgress?.completed_steps ?? [];
+    const activeStep =
+      typeof returningProgress?.current_step === "number"
+        ? returningProgress.current_step
+        : Math.min(completedSteps.length, Math.max(baseSteps.length - 1, 0));
+
+    const timer = window.setTimeout(() => {
+      setMovementContext(context);
+      setMovementProgressId(returningProgress?.id ?? null);
+      setMovementSteps(getDecoratedMovementSteps(baseSteps, completedSteps, activeStep));
+      setCompletedMovementSteps(completedSteps);
+      setCurrentMovementStep(activeStep);
+      setMovementNotes(returningProgress?.notes ?? []);
+      setMovementDiary(returningProgress?.diary ?? []);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [
+    movementContext?.analysisText,
+    movementSteps.length,
+    returningProgress,
+    returningResult,
+    step,
   ]);
 
   const toggleImage = (image: string) => {
@@ -1530,6 +1763,58 @@ export default function Home() {
     }
   }
 
+  async function downloadSavedResultText(result: SavedMetagraphResult) {
+    const resultName = result.name ?? "Метаграф";
+    const resultText = [
+      "Метаграф-разбор",
+      "",
+      `Имя: ${resultName}`,
+      result.gender ? `Пол: ${result.gender}` : null,
+      result.created_at
+        ? `Дата: ${new Date(result.created_at).toLocaleDateString("ru-RU")}`
+        : null,
+      "",
+      "Разбор:",
+      result.analysis_text ?? "",
+    ]
+      .filter((line) => line !== null)
+      .join("\n");
+    const safeName = resultName
+      .trim()
+      .toLowerCase()
+      .replace(/ё/g, "е")
+      .replace(/[^a-zа-я0-9_-]+/gi, "-")
+      .replace(/^-+|-+$/g, "");
+
+    setResultDownloadHint("");
+
+    try {
+      const blob = new Blob([resultText], { type: "text/plain;charset=utf-8" });
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+
+      link.href = objectUrl;
+      link.download = safeName ? `metagraph-${safeName}.txt` : "metagraph-result.txt";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      setResultDownloadHint("Если файл не скачался, зажмите текст и сохраните его.");
+    }
+  }
+
+  async function copySavedResultText(result: SavedMetagraphResult) {
+    setCopyMessage("");
+
+    try {
+      await navigator.clipboard.writeText(result.analysis_text ?? "");
+      setCopyMessage("Разбор скопирован");
+    } catch {
+      setCopyMessage("Не удалось скопировать автоматически. Выделите текст вручную.");
+    }
+  }
+
   async function signInWithEmail(email: string) {
     if (!supabase) {
       setAuthMessage("Вход временно недоступен.");
@@ -1708,20 +1993,6 @@ export default function Home() {
     setIsMyMetagraphOpen(true);
     await loadSavedResults(user);
   }
-
-  const getDecoratedMovementSteps = (
-    steps: MovementStep[],
-    completedSteps: string[],
-    currentStep: number,
-  ): MovementStep[] =>
-    steps.map((movementStep, index) => ({
-      ...movementStep,
-      status: completedSteps.includes(movementStep.id)
-        ? "completed"
-        : index === currentStep
-          ? "active"
-          : "locked",
-    }));
 
   const getMovementDraft = (
     steps = movementSteps,
@@ -2643,6 +2914,383 @@ export default function Home() {
       </section>
     </div>
   ) : null;
+
+  if (step === "postTypingApp") {
+    const appResult = returningResult ?? buildLocalMetagraphResult();
+    const appText = appResult.analysis_text ?? analysisText;
+    const appName = appResult.name ?? formatName(name);
+    const appDate = appResult.created_at
+      ? new Date(appResult.created_at).toLocaleDateString("ru-RU")
+      : new Date().toLocaleDateString("ru-RU");
+    const appRole = appResult.role ?? inferMovementRole(appText);
+    const appDaimon =
+      appResult.daimon ??
+      extractResultSection(appText, "Даймон") ??
+      "Сборка новой роли через маленькие действия";
+    const appArtifact =
+      appResult.artifact ??
+      extractResultSection(appText, "Артефакт перехода") ??
+      "Жетон первого следа";
+    const appKeyPhrase =
+      appResult.key_phrase ??
+      extractResultSection(appText, "Фраза-ключ") ??
+      "Я могу двигаться мягко, но по-настоящему.";
+    const appImageUrl = appResult.image_url ?? generatedImageUrl;
+    const appSteps = movementSteps.length ? movementSteps : generateMovementSteps(appText);
+    const appCompletedCount = completedMovementSteps.length;
+    const appProgressPercent = appSteps.length
+      ? Math.round((appCompletedCount / appSteps.length) * 100)
+      : 0;
+    const appActiveStep =
+      appSteps[currentMovementStep] ?? appSteps[0] ?? {
+        id: "first-trace",
+        title: "Оставить первый след",
+        description: "Сделать маленькое действие, чтобы внутренний вектор стал движением.",
+        task: "Выберите один первый след на 15 минут и выполните его без требования результата.",
+        status: "active" as const,
+      };
+    const openEmailSave = () => {
+      window.localStorage.setItem(
+        "pendingMetagraphResult",
+        JSON.stringify(buildMetagraphPayloadFromSavedResult(appResult, "pending")),
+      );
+      window.localStorage.setItem("lastMetagraphResult", JSON.stringify(appResult));
+      window.localStorage.setItem(
+        "movementProgressDraft",
+        JSON.stringify(getMovementDraft()),
+      );
+      setAuthStep("email");
+      setAuthCode("");
+      setAuthMessage("Введите email, чтобы сохранить Метаграф.");
+      setIsAuthModalOpen(true);
+    };
+
+    return (
+      <>
+        <main className="min-h-screen bg-[#F7F7F7] px-4 pb-28 pt-7 text-[#111111] sm:px-6">
+          <div className="mx-auto w-full max-w-[520px]">
+            <header className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-zinc-400">
+                  Личное пространство
+                </p>
+                <h1 className="mt-1 text-3xl font-semibold tracking-tight">
+                  Мой Метаграф
+                </h1>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPostTypingTab("profile")}
+                className="flex h-11 w-11 items-center justify-center rounded-full border border-black/10 bg-white/85 text-sm font-semibold shadow-sm"
+                aria-label="Профиль"
+              >
+                {profileEmail?.charAt(0).toUpperCase() ?? "•"}
+              </button>
+            </header>
+
+            {postTypingTab === "home" ? (
+              <section className="mt-8 space-y-5">
+                <div className="overflow-hidden rounded-[32px] bg-zinc-950 px-6 py-8 text-center text-white shadow-[0_24px_80px_rgba(17,17,17,0.22)]">
+                  <DaimonOrb />
+                  <p className="mt-7 text-sm font-medium uppercase tracking-[0.2em] text-white/55">
+                    Твой Даймон
+                  </p>
+                  <p className="mt-3 text-xl font-semibold leading-7">
+                    {appDaimon.split("\n")[0]}
+                  </p>
+                </div>
+
+                <div className="rounded-[28px] border border-black/5 bg-white/75 p-5 shadow-sm">
+                  <h2 className="text-xl font-semibold">Точка сборки</h2>
+                  <div className="mt-4 space-y-3 text-sm leading-6 text-zinc-700">
+                    <p>
+                      <strong className="text-[#111111]">Образ силы:</strong>{" "}
+                      {appRole}
+                    </p>
+                    <p>
+                      <strong className="text-[#111111]">Артефакт:</strong>{" "}
+                      {appArtifact.split("\n")[0]}
+                    </p>
+                    <p>
+                      <strong className="text-[#111111]">Фраза-ключ:</strong>{" "}
+                      {appKeyPhrase.split("\n")[0]}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="rounded-[28px] border border-black/5 bg-white/75 p-5 shadow-sm">
+                  <div className="flex items-center justify-between gap-4 text-sm text-zinc-500">
+                    <span>
+                      {appCompletedCount} из {appSteps.length || 7} шагов собрано
+                    </span>
+                    <span>{appProgressPercent}% пути</span>
+                  </div>
+                  <div className="mt-4 h-3 overflow-hidden rounded-full bg-zinc-200">
+                    <div
+                      className="h-full rounded-full bg-[#85DCF6] transition-all duration-500"
+                      style={{ width: `${appProgressPercent}%` }}
+                    />
+                  </div>
+                </div>
+
+                <div className="rounded-[28px] border border-[#85DCF6]/70 bg-white p-5 shadow-sm">
+                  <p className="text-sm font-medium text-zinc-500">Ближайший шаг</p>
+                  <h2 className="mt-2 text-2xl font-semibold">{appActiveStep.title}</h2>
+                  <p className="mt-3 text-base leading-7 text-zinc-700">
+                    {appActiveStep.task}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setPostTypingTab("tasks")}
+                    className="mt-5 rounded-full border-2 border-[#85DCF6] bg-white px-6 py-3 font-semibold"
+                  >
+                    Перейти к заданию
+                  </button>
+                </div>
+              </section>
+            ) : null}
+
+            {postTypingTab === "metagraph" ? (
+              <section className="mt-8 space-y-5">
+                {appImageUrl ? (
+                  <img
+                    src={appImageUrl}
+                    alt="Образ Метаграфа"
+                    className="mx-auto aspect-[3/4] w-full max-w-[420px] rounded-[32px] object-cover shadow-[0_24px_80px_rgba(17,17,17,0.18)]"
+                  />
+                ) : (
+                  <div className="rounded-[32px] bg-zinc-950 px-6 py-10 text-center text-white shadow-[0_24px_80px_rgba(17,17,17,0.18)]">
+                    <DaimonOrb />
+                    <p className="mt-6 text-lg font-semibold">Образ проявляется</p>
+                  </div>
+                )}
+                <div className="rounded-[28px] border border-black/5 bg-white/75 p-5 shadow-sm">
+                  <p className="text-sm text-zinc-500">{appDate}</p>
+                  <h2 className="mt-1 text-3xl font-semibold tracking-tight">{appName}</h2>
+                  <div className="mt-6 whitespace-pre-wrap text-base leading-8 text-zinc-800">
+                    {appText}
+                  </div>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <button
+                    type="button"
+                    onClick={() => downloadSavedResultText(appResult)}
+                    className="rounded-full border-2 border-[#85DCF6] bg-white px-5 py-3 font-semibold"
+                  >
+                    Скачать разбор
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => copySavedResultText(appResult)}
+                    className="rounded-full border border-[#85DCF6] bg-white px-5 py-3 font-medium"
+                  >
+                    Скопировать
+                  </button>
+                  <button
+                    type="button"
+                    onClick={startNewSlice}
+                    className="rounded-full border border-zinc-200 bg-white px-5 py-3 font-medium"
+                  >
+                    Новый срез
+                  </button>
+                </div>
+                {copyMessage || resultDownloadHint ? (
+                  <p className="text-center text-sm text-zinc-500">
+                    {copyMessage || resultDownloadHint}
+                  </p>
+                ) : null}
+              </section>
+            ) : null}
+
+            {postTypingTab === "path" ? (
+              <section className="mt-8 space-y-5">
+                <div>
+                  <h2 className="text-3xl font-semibold tracking-tight">
+                    Карта перехода
+                  </h2>
+                  <div className="mt-4 h-3 overflow-hidden rounded-full bg-zinc-200">
+                    <div
+                      className="h-full rounded-full bg-[#85DCF6] transition-all duration-500"
+                      style={{ width: `${appProgressPercent}%` }}
+                    />
+                  </div>
+                </div>
+                {appSteps.map((movementStep, index) => (
+                  <div
+                    key={movementStep.id}
+                    className={`rounded-[26px] border bg-white/75 p-5 shadow-sm transition ${
+                      movementStep.status === "active"
+                        ? "border-[#85DCF6]"
+                        : "border-black/5"
+                    } ${movementStep.status === "locked" ? "opacity-55" : ""}`}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-sm text-zinc-500">Шаг {index + 1}</p>
+                        <h3 className="mt-1 text-xl font-semibold">
+                          {movementStep.title}
+                        </h3>
+                      </div>
+                      <span className="rounded-full bg-[#F7F7F7] px-3 py-1 text-xs font-medium">
+                        {movementStep.status === "completed"
+                          ? "Собрано"
+                          : movementStep.status === "active"
+                            ? "Открыто"
+                            : "Закрыто"}
+                      </span>
+                    </div>
+                    <p className="mt-3 text-sm leading-6 text-zinc-600">
+                      {movementStep.description}
+                    </p>
+                    {movementStep.status === "active" ? (
+                      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                        <button
+                          type="button"
+                          onClick={completeMovementStep}
+                          className="rounded-full border-2 border-[#85DCF6] bg-white px-5 py-2.5 font-semibold"
+                        >
+                          Выполнил
+                        </button>
+                        <button
+                          type="button"
+                          onClick={postponeMovementStep}
+                          className="rounded-full border border-zinc-200 bg-white px-5 py-2.5 font-medium"
+                        >
+                          Перенести
+                        </button>
+                        <button
+                          type="button"
+                          onClick={replaceMovementTask}
+                          className="rounded-full px-5 py-2.5 font-medium underline underline-offset-4"
+                        >
+                          Хочу другое задание
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </section>
+            ) : null}
+
+            {postTypingTab === "tasks" ? (
+              <section className="mt-8 space-y-5">
+                <div className="rounded-[32px] bg-zinc-950 p-6 text-white shadow-[0_24px_80px_rgba(17,17,17,0.22)]">
+                  <p className="text-sm font-medium text-white/55">Задание</p>
+                  <h2 className="mt-2 text-3xl font-semibold">{appActiveStep.title}</h2>
+                  <p className="mt-4 text-base leading-7 text-white/78">
+                    {appActiveStep.task}
+                  </p>
+                  <div className="mt-6 flex flex-col gap-3">
+                    <button
+                      type="button"
+                      onClick={completeMovementStep}
+                      className="rounded-full bg-[#DFFF45] px-5 py-3 font-semibold text-zinc-950"
+                    >
+                      Выполнил
+                    </button>
+                    <button
+                      type="button"
+                      onClick={postponeMovementStep}
+                      className="rounded-full border border-white/20 px-5 py-3 font-medium"
+                    >
+                      Перенести
+                    </button>
+                    <button
+                      type="button"
+                      onClick={replaceMovementTask}
+                      className="rounded-full px-5 py-3 font-medium underline underline-offset-4"
+                    >
+                      Хочу другое задание
+                    </button>
+                  </div>
+                </div>
+                <div className="rounded-[28px] border border-black/5 bg-white/75 p-5 shadow-sm">
+                  <h2 className="text-2xl font-semibold">Дневник перехода</h2>
+                  <textarea
+                    value={movementDiaryText}
+                    onChange={(event) => setMovementDiaryText(event.target.value)}
+                    rows={5}
+                    placeholder="Что я заметил? Где стало легче? Где появилось сопротивление?"
+                    className="mt-5 w-full resize-none rounded-3xl border border-zinc-200 bg-white px-5 py-4 text-base leading-7 outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200"
+                  />
+                  <button
+                    type="button"
+                    onClick={saveMovementDiaryNote}
+                    disabled={!movementDiaryText.trim()}
+                    className="mt-4 rounded-full border-2 border-[#85DCF6] bg-white px-6 py-3 font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Сохранить заметку
+                  </button>
+                  {movementDiary.length > 0 ? (
+                    <div className="mt-6 space-y-3">
+                      {movementDiary.slice(0, 3).map((entry) => (
+                        <div
+                          key={entry.id}
+                          className="rounded-3xl bg-[#F7F7F7] p-4 text-sm leading-6 text-zinc-700"
+                        >
+                          <p>{entry.text}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              </section>
+            ) : null}
+
+            {postTypingTab === "profile" ? (
+              <section className="mt-8 space-y-5">
+                <div className="rounded-[32px] border border-black/5 bg-white/75 p-6 shadow-sm">
+                  <h2 className="text-3xl font-semibold tracking-tight">Профиль</h2>
+                  {user ? (
+                    <div className="mt-5 space-y-4">
+                      <p className="text-base leading-7 text-zinc-700">
+                        Вы вошли как {user.email ?? session?.user.email}
+                      </p>
+                      <p className="rounded-3xl bg-[#85DCF6]/20 px-5 py-4 font-medium">
+                        Метаграф сохранён
+                      </p>
+                      <button
+                        type="button"
+                        onClick={signOut}
+                        className="w-full rounded-full border border-zinc-200 bg-white px-6 py-3 font-medium"
+                      >
+                        Выйти
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="mt-5 space-y-4">
+                      <p className="text-base leading-7 text-zinc-700">
+                        Сейчас Метаграф сохранён только на этом устройстве.
+                        Войдите по email, чтобы не потерять его и открыть с
+                        другого телефона.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={openEmailSave}
+                        className="w-full rounded-full border-2 border-[#85DCF6] bg-white px-6 py-3 font-semibold"
+                      >
+                        Сохранить через email
+                      </button>
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={startNewSlice}
+                    className="mt-4 w-full rounded-full bg-zinc-950 px-6 py-3 font-semibold text-white"
+                  >
+                    Пройти новый срез
+                  </button>
+                </div>
+              </section>
+            ) : null}
+          </div>
+        </main>
+        <BottomNavigation activeTab={postTypingTab} onChange={setPostTypingTab} />
+        {authModal}
+        {myMetagraphModal}
+      </>
+    );
+  }
 
   if (step === "returningDashboard") {
     const dashboardText = returningResult?.analysis_text ?? "";
