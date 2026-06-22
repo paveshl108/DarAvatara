@@ -1271,7 +1271,7 @@ export default function Home() {
             className="start-reveal h-[38vh] w-auto sm:h-[42vh]"
           />
           <h1
-            className="start-reveal mt-5 max-w-[980px] text-center text-[clamp(2rem,8.4vw,4.5rem)] font-semibold uppercase leading-[0.98] tracking-[-0.03em] text-[#111111] [animation-delay:120ms] sm:mt-7 sm:leading-[0.96]"
+            className="start-reveal mt-5 max-w-[980px] text-center text-[clamp(2rem,8.4vw,4.5rem)] font-semibold uppercase leading-[0.98] tracking-[-0.03em] text-[#111111] [animation-delay:120ms] sm:mt-7 sm:leading-[0.96] lg:max-w-[620px] lg:text-[36px] lg:leading-[1.02] lg:tracking-[-0.015em] xl:text-[38px]"
             style={{ fontFamily: '"Lagonic", "Laqonic", "Manrope", sans-serif' }}
           >
             <span className="block">Глубокая персональная</span>
@@ -1284,14 +1284,14 @@ export default function Home() {
           <button
             type="button"
             onClick={() => setStep("gender")}
-            className="start-reveal mt-12 w-full max-w-[500px] rounded-full border-2 border-[#85DCF6] bg-white px-10 py-5 text-center text-[21px] font-semibold text-[#111111] shadow-[0_12px_36px_rgba(17,17,17,0.06)] transition duration-200 [animation-delay:240ms] hover:border-[#6FD1EE] hover:shadow-[0_16px_42px_rgba(17,17,17,0.08)] active:scale-[0.99] sm:mt-14 sm:py-7 sm:text-[26px]"
+            className="start-reveal mt-12 w-full max-w-[500px] rounded-full border-2 border-[#85DCF6] bg-white px-10 py-5 text-center text-[21px] font-semibold text-[#111111] shadow-[0_12px_36px_rgba(17,17,17,0.06)] transition duration-200 [animation-delay:240ms] hover:border-[#6FD1EE] hover:shadow-[0_16px_42px_rgba(17,17,17,0.08)] active:scale-[0.99] sm:mt-14 sm:py-7 sm:text-[26px] lg:mt-7"
           >
             Начать
           </button>
           <button
             type="button"
             onClick={() => setIsAboutOpen(true)}
-            className="start-reveal mt-5 text-sm font-medium text-[#111111]/80 underline underline-offset-4 transition [animation-delay:360ms] hover:text-[#111111] sm:text-base"
+            className="start-reveal mt-5 text-sm font-medium text-[#111111]/80 underline underline-offset-4 transition [animation-delay:360ms] hover:text-[#111111] sm:text-base lg:mt-3"
           >
             Что такое Метаграф
           </button>
