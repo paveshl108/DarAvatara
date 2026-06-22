@@ -1,7 +1,9 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { Session, User } from "@supabase/supabase-js";
+import { supabase } from "@/lib/supabase/client";
 
 const choiceImages = [
   {
@@ -100,6 +102,15 @@ const archetypes = [
 
 type ChoiceImage = (typeof choiceImages)[number];
 type Gender = "male" | "female" | null;
+type SavedMetagraphResult = {
+  id: string;
+  created_at?: string;
+  name?: string | null;
+  role?: string | null;
+  source?: string | null;
+  analysis_text?: string | null;
+  image_url?: string | null;
+};
 
 const genderLabels: Record<Exclude<Gender, null>, string> = {
   male: "Мужчина",
@@ -594,6 +605,23 @@ function generateMetagraphImage({
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
+function extractResultSection(resultText: string, sectionTitle: string) {
+  const startIndex = resultText.indexOf(sectionTitle);
+
+  if (startIndex === -1) {
+    return null;
+  }
+
+  const sectionStart = startIndex + sectionTitle.length;
+  const rest = resultText.slice(sectionStart).trim();
+  const nextSectionMatch = rest.match(/\n\n[А-ЯЁ][^\n]{2,80}\n/);
+  const sectionText = nextSectionMatch
+    ? rest.slice(0, nextSectionMatch.index).trim()
+    : rest.trim();
+
+  return sectionText || null;
+}
+
 export default function Home() {
   const [step, setStep] = useState<
     "start" | "gender" | "name" | "images" | "questions" | "result"
@@ -615,6 +643,20 @@ export default function Home() {
   const [downloadHint, setDownloadHint] = useState("");
   const [resultDownloadHint, setResultDownloadHint] = useState("");
   const [copyMessage, setCopyMessage] = useState("");
+  const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [authEmail, setAuthEmail] = useState("");
+  const [authMessage, setAuthMessage] = useState("");
+  const [authLoading, setAuthLoading] = useState(false);
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [saveMessage, setSaveMessage] = useState("");
+  const [savedResultId, setSavedResultId] = useState<string | null>(null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isMyMetagraphOpen, setIsMyMetagraphOpen] = useState(false);
+  const [savedResults, setSavedResults] = useState<SavedMetagraphResult[]>([]);
+  const [savedResultsLoading, setSavedResultsLoading] = useState(false);
+  const [openedSavedResult, setOpenedSavedResult] =
+    useState<SavedMetagraphResult | null>(null);
   const metagraphResult = useMemo(
     () =>
       generateMetagraphResult({
@@ -635,6 +677,8 @@ export default function Home() {
       }),
     [answers, name, selectedGender, selectedImages],
   );
+  const analysisText = aiResult && !analysisFailed ? aiResult : fallbackResult;
+  const analysisSource = aiResult && !analysisFailed ? "ai" : "fallback";
   const selectedImageDetails = useMemo(
     () =>
       selectedImages
@@ -656,6 +700,166 @@ export default function Home() {
         .filter(Boolean),
     [selectedImages],
   );
+  const buildMetagraphPayload = useCallback(
+    (userId: string) => ({
+      user_id: userId,
+      name: formatName(name),
+      gender: selectedGender,
+      selected_images: selectedImageDetails.map((image) => ({
+        id: image?.id ?? null,
+        number: image?.id ?? null,
+        name: image?.name ?? null,
+        title: image?.name ?? null,
+        tags: image?.tags ?? [],
+        order: image?.order ?? null,
+      })),
+      answers: questions.map((question, index) => ({
+        question,
+        answer: answers[index] ?? "",
+        index,
+      })),
+      analysis_text: analysisText,
+      image_prompt: null,
+      image_url: generatedImageUrl || null,
+      role: metagraphResult.archetype.title ?? null,
+      daimon: extractResultSection(analysisText, "Даймон"),
+      artifact: extractResultSection(analysisText, "Артефакт перехода"),
+      key_phrase: extractResultSection(analysisText, "Фраза-ключ"),
+      source: analysisSource,
+    }),
+    [
+      analysisSource,
+      analysisText,
+      answers,
+      generatedImageUrl,
+      metagraphResult.archetype.title,
+      name,
+      selectedGender,
+      selectedImageDetails,
+    ],
+  );
+
+  const insertMetagraphPayload = useCallback(
+    async (payload: Record<string, unknown>) => {
+      if (!supabase) {
+        throw new Error("Supabase client is not configured.");
+      }
+
+      const { data, error } = await supabase
+        .from("metagraph_results")
+        .insert(payload)
+        .select("id")
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      return data?.id as string | undefined;
+    },
+    [],
+  );
+
+  const savePendingMetagraphResult = useCallback(
+    async (currentUser: User) => {
+      if (!supabase) {
+        return;
+      }
+
+      const pendingResult = window.localStorage.getItem("pendingMetagraphResult");
+
+      if (!pendingResult) {
+        return;
+      }
+
+      try {
+        const pendingPayload = JSON.parse(pendingResult) as Record<string, unknown>;
+        const createdId = await insertMetagraphPayload({
+          ...pendingPayload,
+          user_id: currentUser.id,
+        });
+
+        window.localStorage.removeItem("pendingMetagraphResult");
+        setSavedResultId(createdId ?? null);
+        setSaveMessage("Метаграф сохранён");
+      } catch (error) {
+        console.error("Failed to save pending Metagraph result.", error);
+        setSaveMessage("Не удалось сохранить. Попробуйте ещё раз.");
+      }
+    },
+    [insertMetagraphPayload],
+  );
+
+  const loadSavedResults = useCallback(
+    async (currentUser = user) => {
+      if (!supabase || !currentUser) {
+        setSavedResults([]);
+        return;
+      }
+
+      setSavedResultsLoading(true);
+
+      try {
+        const { data, error } = await supabase
+          .from("metagraph_results")
+          .select("id, created_at, name, role, source, analysis_text, image_url")
+          .eq("user_id", currentUser.id)
+          .order("created_at", { ascending: false })
+          .limit(10);
+
+        if (error) {
+          throw error;
+        }
+
+        setSavedResults((data ?? []) as SavedMetagraphResult[]);
+      } catch (error) {
+        console.error("Failed to load saved Metagraph results.", error);
+        setSavedResults([]);
+      } finally {
+        setSavedResultsLoading(false);
+      }
+    },
+    [user],
+  );
+
+  useEffect(() => {
+    if (!supabase) {
+      return;
+    }
+
+    let isActive = true;
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (!isActive) {
+        return;
+      }
+
+      const currentSession = data.session;
+
+      setSession(currentSession);
+      setUser(currentSession?.user ?? null);
+
+      if (currentSession?.user) {
+        savePendingMetagraphResult(currentSession.user);
+      }
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, currentSession) => {
+      setSession(currentSession);
+      setUser(currentSession?.user ?? null);
+
+      if (currentSession?.user) {
+        savePendingMetagraphResult(currentSession.user);
+      }
+    });
+
+    return () => {
+      isActive = false;
+      subscription.unsubscribe();
+    };
+  }, [savePendingMetagraphResult]);
 
   useEffect(() => {
     if (step !== "result") {
@@ -935,6 +1139,101 @@ export default function Home() {
     }
   }
 
+  async function signInWithEmail(email: string) {
+    if (!supabase) {
+      setAuthMessage("Вход временно недоступен.");
+      return;
+    }
+
+    if (!email.trim()) {
+      setAuthMessage("Введите email.");
+      return;
+    }
+
+    setAuthLoading(true);
+    setAuthMessage("");
+
+    try {
+      if (step === "result") {
+        window.localStorage.setItem(
+          "pendingMetagraphResult",
+          JSON.stringify(buildMetagraphPayload(user?.id ?? "pending")),
+        );
+      }
+
+      const { error } = await supabase.auth.signInWithOtp({
+        email: email.trim(),
+        options: {
+          emailRedirectTo: window.location.origin,
+        },
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      setAuthMessage("Проверьте почту и откройте ссылку для входа.");
+    } catch (error) {
+      console.error("Failed to send magic link.", error);
+      setAuthMessage("Не удалось отправить ссылку. Попробуйте ещё раз.");
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  async function signOut() {
+    if (!supabase) {
+      return;
+    }
+
+    await supabase.auth.signOut();
+    setSession(null);
+    setUser(null);
+    setSavedResults([]);
+    setOpenedSavedResult(null);
+    setSaveMessage("");
+    setSavedResultId(null);
+  }
+
+  async function saveMetagraphResult() {
+    setSaveMessage("");
+
+    if (!user) {
+      window.localStorage.setItem(
+        "pendingMetagraphResult",
+        JSON.stringify(buildMetagraphPayload("pending")),
+      );
+      setAuthMessage("Введите email, чтобы сохранить Метаграф.");
+      setIsAuthModalOpen(true);
+      return;
+    }
+
+    setSaveLoading(true);
+
+    try {
+      const createdId = await insertMetagraphPayload(buildMetagraphPayload(user.id));
+
+      setSavedResultId(createdId ?? null);
+      setSaveMessage("Метаграф сохранён");
+    } catch (error) {
+      console.error("Failed to save Metagraph result.", error);
+      setSaveMessage("Не удалось сохранить. Попробуйте ещё раз.");
+    } finally {
+      setSaveLoading(false);
+    }
+  }
+
+  async function openMyMetagraph() {
+    if (!user) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+
+    setOpenedSavedResult(null);
+    setIsMyMetagraphOpen(true);
+    await loadSavedResults(user);
+  }
+
   async function downloadImage(imageUrl: string) {
     setDownloadHint("");
 
@@ -956,10 +1255,175 @@ export default function Home() {
     }
   }
 
+  const authModal = isAuthModalOpen ? (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-5 py-8 backdrop-blur-sm">
+      <div className="relative w-full max-w-md rounded-[28px] bg-[#F7F7F7] p-6 text-[#111111] shadow-[0_24px_80px_rgba(17,17,17,0.18)]">
+        <button
+          type="button"
+          aria-label="Закрыть вход"
+          onClick={() => setIsAuthModalOpen(false)}
+          className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white text-2xl leading-none"
+        >
+          ×
+        </button>
+        <h2 className="pr-10 text-2xl font-semibold tracking-tight">
+          Сохраните свой Метаграф
+        </h2>
+        {user ? (
+          <div className="mt-5 space-y-4">
+            <p className="text-base leading-7 text-[#111111]/75">
+              Вы вошли как {user.email ?? session?.user.email}
+            </p>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => setIsAuthModalOpen(false)}
+                className="rounded-full border-2 border-[#85DCF6] bg-white px-5 py-3 text-base font-medium"
+              >
+                Продолжить
+              </button>
+              <button
+                type="button"
+                onClick={signOut}
+                className="rounded-full border border-zinc-200 bg-white px-5 py-3 text-base font-medium"
+              >
+                Выйти
+              </button>
+            </div>
+          </div>
+        ) : (
+          <form
+            className="mt-5 space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              signInWithEmail(authEmail);
+            }}
+          >
+            <p className="text-base leading-7 text-[#111111]/75">
+              Введите email, чтобы вернуться к своему разбору и будущей карте
+              движения с любого устройства.
+            </p>
+            <input
+              type="email"
+              value={authEmail}
+              onChange={(event) => setAuthEmail(event.target.value)}
+              placeholder="Email"
+              className="w-full rounded-full border border-zinc-200 bg-white px-5 py-4 text-base outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200"
+            />
+            <button
+              type="submit"
+              disabled={authLoading}
+              className="w-full rounded-full border-2 border-[#85DCF6] bg-white px-5 py-4 text-base font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {authLoading ? "Отправляем..." : "Получить ссылку для входа"}
+            </button>
+          </form>
+        )}
+        {authMessage ? (
+          <p className="mt-4 text-sm leading-6 text-zinc-500">{authMessage}</p>
+        ) : null}
+      </div>
+    </div>
+  ) : null;
+
+  const myMetagraphModal = isMyMetagraphOpen ? (
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-[#F7F7F7] px-5 py-8 text-[#111111] sm:px-8">
+      <button
+        type="button"
+        aria-label="Закрыть Мой Метаграф"
+        onClick={() => {
+          setIsMyMetagraphOpen(false);
+          setOpenedSavedResult(null);
+        }}
+        className="fixed right-5 top-5 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-white text-3xl leading-none shadow-lg"
+      >
+        ×
+      </button>
+      <section className="mx-auto w-full max-w-3xl py-14">
+        <h2 className="text-3xl font-semibold tracking-tight sm:text-5xl">
+          Мой Метаграф
+        </h2>
+        {openedSavedResult ? (
+          <div className="mt-8">
+            {openedSavedResult.image_url ? (
+              <img
+                src={openedSavedResult.image_url}
+                alt="Сохранённый образ Метаграфа"
+                className="mx-auto mb-8 aspect-[3/4] w-full max-w-[360px] rounded-[28px] object-cover shadow-[0_24px_70px_rgba(24,24,27,0.18)]"
+              />
+            ) : null}
+            <article className="rounded-[28px] border border-zinc-200 bg-white/70 p-6 text-left shadow-sm">
+              <div className="whitespace-pre-wrap text-base leading-8 text-zinc-800">
+                {openedSavedResult.analysis_text}
+              </div>
+            </article>
+            <button
+              type="button"
+              onClick={() => setOpenedSavedResult(null)}
+              className="mt-6 rounded-full border-2 border-[#85DCF6] bg-white px-6 py-3 text-base font-medium"
+            >
+              Закрыть
+            </button>
+          </div>
+        ) : (
+          <div className="mt-8">
+            {savedResultsLoading ? (
+              <p className="text-zinc-500">Загружаем сохранённые Метаграфы…</p>
+            ) : savedResults.length > 0 ? (
+              <div className="space-y-4">
+                {savedResults.map((result) => (
+                  <div
+                    key={result.id}
+                    className="rounded-3xl border border-zinc-200 bg-white/70 p-5 shadow-sm"
+                  >
+                    <p className="text-sm text-zinc-500">
+                      {result.created_at
+                        ? new Date(result.created_at).toLocaleDateString("ru-RU")
+                        : "Без даты"}
+                    </p>
+                    <h3 className="mt-2 text-xl font-semibold">
+                      {result.name || "Метаграф"}
+                    </h3>
+                    <p className="mt-1 text-sm text-zinc-500">
+                      {[result.role, result.source].filter(Boolean).join(" · ") ||
+                        "Сохранённый разбор"}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setOpenedSavedResult(result)}
+                      className="mt-4 rounded-full border-2 border-[#85DCF6] bg-white px-5 py-2.5 text-sm font-medium"
+                    >
+                      Открыть
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-zinc-500">
+                У вас пока нет сохранённых Метаграфов.
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setIsMyMetagraphOpen(false);
+                setStep("gender");
+              }}
+              className="mt-8 rounded-full border-2 border-[#85DCF6] bg-white px-6 py-3 text-base font-medium"
+            >
+              Пройти Метаграф
+            </button>
+          </div>
+        )}
+      </section>
+    </div>
+  ) : null;
+
   if (step === "result") {
     const isImagePending = !generatedImageUrl && (Boolean(aiResult) || analysisFailed);
 
     return (
+      <>
       <main className="flex min-h-screen flex-1 justify-center bg-[#F7F7F7] px-6 pb-10 pt-28 text-zinc-950">
         <BackButton onClick={goBack} />
         <section className="mx-auto flex w-full max-w-3xl flex-col">
@@ -1024,8 +1488,16 @@ export default function Home() {
               <div className="mx-auto mt-8 flex w-full max-w-lg flex-col gap-3 sm:flex-row sm:justify-center">
                 <button
                   type="button"
+                  onClick={saveMetagraphResult}
+                  disabled={saveLoading}
+                  className="rounded-full border-2 border-[#85DCF6] bg-white px-6 py-3 text-base font-medium text-[#111111] shadow-sm transition hover:border-[#6FD1EE] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {saveLoading ? "Сохраняем..." : "Сохранить мой Метаграф"}
+                </button>
+                <button
+                  type="button"
                   onClick={downloadResultText}
-                  className="rounded-full border-2 border-[#85DCF6] bg-white px-6 py-3 text-base font-medium text-[#111111] shadow-sm transition hover:border-[#6FD1EE]"
+                  className="rounded-full border border-[#85DCF6] bg-white px-6 py-3 text-base font-medium text-[#111111] shadow-sm transition hover:border-[#6FD1EE]"
                 >
                   Скачать разбор
                 </button>
@@ -1037,10 +1509,13 @@ export default function Home() {
                   Скопировать
                 </button>
               </div>
-              {resultDownloadHint || copyMessage ? (
+              {saveMessage || resultDownloadHint || copyMessage ? (
                 <p className="mt-3 text-center text-sm leading-6 text-zinc-500">
-                  {copyMessage || resultDownloadHint}
+                  {saveMessage || copyMessage || resultDownloadHint}
                 </p>
+              ) : null}
+              {savedResultId ? (
+                <p className="sr-only">Сохранённый Метаграф: {savedResultId}</p>
               ) : null}
 
               {isImageModalOpen && generatedImageUrl ? (
@@ -1082,6 +1557,9 @@ export default function Home() {
           </button>
         </section>
       </main>
+      {authModal}
+      {myMetagraphModal}
+      </>
     );
   }
 
@@ -1295,6 +1773,20 @@ export default function Home() {
           >
             Что такое Метаграф
           </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (user) {
+                openMyMetagraph();
+                return;
+              }
+
+              setIsAuthModalOpen(true);
+            }}
+            className="start-reveal mt-3 text-xs font-medium text-[#111111]/60 underline underline-offset-4 transition [animation-delay:460ms] hover:text-[#111111] sm:text-sm"
+          >
+            {user ? "Мой Метаграф" : "Войти / сохранить Метаграф"}
+          </button>
         </section>
       </main>
 
@@ -1329,6 +1821,8 @@ export default function Home() {
           </section>
         </div>
       ) : null}
+      {authModal}
+      {myMetagraphModal}
     </>
   );
 }
