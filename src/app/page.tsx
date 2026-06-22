@@ -196,7 +196,7 @@ function MetagraphAboutContent() {
         <strong>кем вы уже становитесь</strong> — и как этому новому уровню
         наконец дать форму.
       </p>
-      <div className="mt-8 rounded-3xl border border-[#85DCF6]/70 border-l-2 bg-white/60 px-5 py-5 text-[17px] leading-[1.65] text-[#111111] shadow-[0_12px_34px_rgba(17,17,17,0.04)] sm:mt-10 sm:px-6 sm:py-6 sm:text-[20px]">
+      <div className="mt-8 text-[17px] leading-[1.65] text-[#111111] sm:mt-10 sm:text-[20px]">
         <p>Метаграф — это не про то, чтобы придумать себя заново.</p>
         <p className="mt-2">
           Это про то, чтобы <strong>узнать себя глубже и проявиться точнее</strong>.
