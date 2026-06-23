@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase/client";
 
@@ -149,6 +149,42 @@ type MovementContext = {
   returnTo: "result" | "saved" | "dashboard";
 };
 type PostTypingTab = "home" | "metagraph" | "path" | "tasks" | "profile";
+type SpeechRecognitionAlternativeLike = {
+  transcript: string;
+};
+type SpeechRecognitionResultLike = {
+  isFinal: boolean;
+  length: number;
+  0: SpeechRecognitionAlternativeLike;
+};
+type SpeechRecognitionResultListLike = {
+  length: number;
+  [index: number]: SpeechRecognitionResultLike;
+};
+type SpeechRecognitionEventLike = Event & {
+  resultIndex: number;
+  results: SpeechRecognitionResultListLike;
+};
+type SpeechRecognitionErrorEventLike = Event & {
+  error?: string;
+};
+type BrowserSpeechRecognition = {
+  lang: string;
+  interimResults: boolean;
+  continuous: boolean;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
+  onend: (() => void) | null;
+};
+type SpeechRecognitionConstructor = new () => BrowserSpeechRecognition;
+type SpeechRecognitionWindow = Window &
+  typeof globalThis & {
+    SpeechRecognition?: SpeechRecognitionConstructor;
+    webkitSpeechRecognition?: SpeechRecognitionConstructor;
+  };
 
 const postTypingTabs: { id: PostTypingTab; label: string }[] = [
   { id: "home", label: "Главная" },
@@ -960,6 +996,10 @@ export default function Home() {
   const [questionIndex, setQuestionIndex] = useState(0);
   const [currentAnswer, setCurrentAnswer] = useState("");
   const [answers, setAnswers] = useState<string[]>([]);
+  const [isListening, setIsListening] = useState(false);
+  const [isSpeechSupported, setIsSpeechSupported] = useState(true);
+  const [speechMessage, setSpeechMessage] = useState("");
+  const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const [aiResult, setAiResult] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisFailed, setAnalysisFailed] = useState(false);
@@ -1570,6 +1610,46 @@ export default function Home() {
     };
   }, [loadSavedResults, step, user]);
 
+  useEffect(() => {
+    const SpeechRecognition =
+      typeof window !== "undefined"
+        ? (window as SpeechRecognitionWindow).SpeechRecognition ??
+          (window as SpeechRecognitionWindow).webkitSpeechRecognition
+        : undefined;
+
+    const timer = window.setTimeout(() => {
+      setIsSpeechSupported(Boolean(SpeechRecognition));
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (step === "questions") {
+      return;
+    }
+
+    recognitionRef.current?.abort();
+    recognitionRef.current = null;
+
+    const timer = window.setTimeout(() => {
+      setIsListening(false);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [step]);
+
+  useEffect(
+    () => () => {
+      recognitionRef.current?.abort();
+    },
+    [],
+  );
+
   const toggleImage = (image: string) => {
     setSelectedImages((currentImages) => {
       if (currentImages.includes(image)) {
@@ -1584,12 +1664,87 @@ export default function Home() {
     });
   };
 
+  const stopVoiceInput = () => {
+    recognitionRef.current?.stop();
+    recognitionRef.current = null;
+    setIsListening(false);
+  };
+
+  const startVoiceInput = () => {
+    if (isListening) {
+      stopVoiceInput();
+      return;
+    }
+
+    const SpeechRecognition =
+      typeof window !== "undefined"
+        ? (window as SpeechRecognitionWindow).SpeechRecognition ??
+          (window as SpeechRecognitionWindow).webkitSpeechRecognition
+        : undefined;
+
+    if (!SpeechRecognition) {
+      setIsSpeechSupported(false);
+      setSpeechMessage(
+        "Этот браузер не поддерживает голосовой ввод. Можно ответить текстом.",
+      );
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      const initialAnswer = currentAnswer.trim();
+
+      recognition.lang = "ru-RU";
+      recognition.interimResults = true;
+      recognition.continuous = true;
+      recognition.onresult = (event) => {
+        let transcript = "";
+
+        for (let index = 0; index < event.results.length; index += 1) {
+          transcript += event.results[index][0]?.transcript ?? "";
+        }
+
+        const nextAnswer = [initialAnswer, transcript.trim()]
+          .filter(Boolean)
+          .join(" ")
+          .replace(/\s+/g, " ");
+
+        setCurrentAnswer(nextAnswer);
+        setSpeechMessage("Голос записывается. Можно остановить и поправить текст.");
+      };
+      recognition.onerror = (event) => {
+        console.error("Speech recognition failed.", event.error);
+        setSpeechMessage(
+          "Не удалось распознать голос. Проверьте доступ к микрофону или ответьте текстом.",
+        );
+        setIsListening(false);
+      };
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+      setIsListening(true);
+      setSpeechMessage("Слушаю. Ответьте голосом на вопрос.");
+    } catch (error) {
+      console.error("Failed to start speech recognition.", error);
+      setSpeechMessage(
+        "Не удалось включить голосовой ввод. Можно ответить текстом.",
+      );
+      setIsListening(false);
+    }
+  };
+
   const saveAnswerAndContinue = () => {
+    stopVoiceInput();
+
     const nextAnswers = [...answers];
 
     nextAnswers[questionIndex] = currentAnswer.trim();
     setAnswers(nextAnswers);
     setCurrentAnswer("");
+    setSpeechMessage("");
 
     if (questionIndex === questions.length - 1) {
       setStep("result");
@@ -1632,6 +1787,8 @@ export default function Home() {
     }
 
     if (step === "questions") {
+      stopVoiceInput();
+      setSpeechMessage("");
       saveCurrentQuestionDraft();
 
       if (questionIndex > 0) {
@@ -3904,12 +4061,48 @@ export default function Home() {
           <h1 className="mt-5 text-2xl font-medium leading-9 tracking-tight text-zinc-900 sm:text-4xl sm:leading-tight">
             {questions[questionIndex]}
           </h1>
+          <div className="mt-8 w-full rounded-[28px] border border-[#85DCF6]/60 bg-white/75 p-4 text-left shadow-sm">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-zinc-900">
+                  Можно ответить голосом
+                </p>
+                <p className="mt-1 text-sm leading-6 text-zinc-500">
+                  Нажмите кнопку, скажите ответ, затем при желании поправьте текст.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={startVoiceInput}
+                disabled={!isSpeechSupported}
+                className={`flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                  isListening
+                    ? "bg-zinc-950 text-white"
+                    : "border-2 border-[#85DCF6] bg-white text-[#111111]"
+                }`}
+              >
+                <span
+                  className={`flex h-3 w-3 rounded-full ${
+                    isListening ? "bg-[#85DCF6]" : "bg-zinc-300"
+                  }`}
+                />
+                {isListening ? "Остановить" : "Говорить"}
+              </button>
+            </div>
+            {speechMessage ? (
+              <p className="mt-3 text-sm leading-6 text-zinc-500">{speechMessage}</p>
+            ) : !isSpeechSupported ? (
+              <p className="mt-3 text-sm leading-6 text-zinc-500">
+                В этом браузере голосовой ввод недоступен. Ответьте текстом.
+              </p>
+            ) : null}
+          </div>
           <textarea
             value={currentAnswer}
             onChange={(event) => setCurrentAnswer(event.target.value)}
             rows={6}
-            placeholder="Напиши свой ответ..."
-            className="mt-8 w-full resize-none rounded-3xl border border-zinc-200 bg-white/80 px-5 py-4 text-left text-base leading-7 text-zinc-950 shadow-sm outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200"
+            placeholder="Ответ появится здесь. Его можно отредактировать вручную..."
+            className="mt-4 w-full resize-none rounded-3xl border border-zinc-200 bg-white/80 px-5 py-4 text-left text-base leading-7 text-zinc-950 shadow-sm outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200"
           />
           <button
             type="button"
